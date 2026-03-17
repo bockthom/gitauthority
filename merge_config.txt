@@ -1,0 +1,70 @@
+# Merge Aliases Configuration
+# Format: OPTION_NAME = true/false  # Description
+# Lines starting with # are comments
+
+# Matching Rules
+EMAIL = true  # Match aliases with identical email addresses
+COMP_EMAIL_PREFIX = true  # Match aliases with compound email prefixes (punctuation normalized)
+SIMPLE_EMAIL_PREFIX = true  # Match aliases with simple email prefixes
+PREFIX_LOGIN = true  # Match when email prefix matches login
+PREFIX_NAME = true  # Match when email prefix matches name
+LOGIN_NAME = true  # Match when login matches name
+FULL_NAME = true  # Match aliases with identical full names
+SWITCHED_NAME = true  # Match aliases where first and last name are swapped
+DOMAIN = true  # Match aliases with identical email domains
+DOMAIN_MAIN_PART = true  # Match when domain main part and normalized prefix match
+DOMAIN_NAME_MATCH = true  # Match when domain matches normalized name
+GITHUB_USERNAME_MATCH = true  # Match GitHub usernames
+COMMA_SUFFIX_MATCH = true  # Match names with comma suffix variations
+ABBREV_FIRST_NAME = true  # Match abbreviated first names
+ABBREV_LAST_NAME = true  # Match abbreviated last names
+ABBREV_MIDDLE_NAME = true  # Match abbreviated middle names
+LOCATION = true  # Match aliases with same location and full name
+
+# Thresholds
+THR_MIN = 1  # Minimum cluster size threshold
+THR_MAX = 40  # Maximum cluster size threshold
+THR_MIN_LENGTH = 3  # Minimum length of any token (name or prefix) used for matching
+
+# Normalization Settings
+ENABLE_GERMAN_DETECTION = true  # Detect and handle German umlauts
+ENABLE_DUAL_NORMALIZATION = true  # Use both German and simplified normalization
+
+# Preprocessing Settings
+NORMALIZE_UNICODE_NFC = true  # Normalize Unicode to NFC (composed form)
+NORMALIZE_LEETSPEAK = true  # Normalize leetspeak characters (e.g., "h3ll0" -> "hello", "c0d3r" -> "coder")
+REMOVE_TIMESTAMPS = true  # Remove timestamp patterns (e.g., "13:37:28")
+REMOVE_TIMEZONES = true  # Remove timezone abbreviations (e.g., "GMT", "UTC", "CET")
+REMOVE_YEARS = true  # Remove years (1900-2099) from beginning and end
+REMOVE_TITLES = true  # Remove common titles and suffixes (e.g., "Dr.", "Jr.", "III")
+REMOVE_PUNCTUATION = true  # Remove punctuation marks from normalized names
+REMOVE_MIDDLE_NAMES = true  # Remove single-character or common first name middle names
+
+# Blacklist Settings
+BLACKLIST_INCLUDE_FIRST_NAMES = true  # Include first names in blacklist for name-based checks
+
+# Blacklist Terms (comma-separated lists)
+# Git hosting platforms and issue trackers
+BLACKLIST_GIT_HOSTING = git, github, bitbucket, gitlab, gitbucket, gitea, gogs, gitolite, gitweb, gitolite3, gitolite-admin, gitolite-repositories, jira, bugzilla, launchpad, sourceforge, codeberg, sr.ht, pagure, repo, repos, cran, rstudio
+
+# Email service providers
+BLACKLIST_EMAIL_PROVIDERS = gmail, yahoo, hotmail, outlook, live, icloud, mailinator, trashmail, trash-mail, posteo, hey, laposte, protonmail, gmx, comcast, me, mailbox, googlemail, web, qq, 163, 126, free, msn, yandex, fastmail, sina, aol, t-online, naver, seznam, tiscali, wp, orange, wanadoo, libero, rambler, virgilio, sbcglobal, verizon, att, zoho, onet, interia
+
+# Generic administrative and system terms
+BLACKLIST_GENERIC_TERMS = admin, administrator, root, support, info, contact, no-reply, noreply, kontakt, contato, hallo, webmaster, mail, email, post, linux, code, system admin, system administrator, domain, sysadmin, team, staff, office, office admin, office administrator, bug, bugs, error, errors, developer, development, engineering, engineer, it, it admin, it administrator, it support, tech, technical, tech support, technical support, dev, help, service, sales, marketing, security, abuse, devnull, nullmailer, mailer-daemon, mailer-deamon, daemon, hostmaster, host, ftp, smtp, pop, imap, user, test, example, demo, guest, anonymous, unknown, system, bot, robot, agent, maint, maintainer, maintainers, i18n, spam, mailing, list, lists, project, hello, hi, hey, greetings, welcome, howdy, hola, bonjour, ciao, salut, namaste, me, my, you, your, we, our, us, myself, yourself, world, everyone, crew, folks, people, international, universal, general, common, public, private, personal, business, professional, work, home, family, friends, colleague, colleagues, partner, partners, associate, associates, human, users, member, members, customer, customers, client, clients, send, receive, reply, message, messages, write, read, subscribe, unsubscribe, new, old, current, today, now, main, primary, secondary, first, second, default, good, best, great, super, amazing, awesome, nice, cool, testing, sample, temp, temporary, official, unofficial, real, fake, virtual, digital, online, offline, active, inactive, busy, available, away, idle, open, closed, start, stop, begin, end, finish, complete, incomplete, alpha, beta, rsvp, stable, unstable, draft, final, version, release, update, upgrade, downgrade, install, uninstall, configure, setup, reset, restart, reboot, shutdown, poweroff, sleep, hibernate, lock, unlock, package, packages, kernel, webnews, weboffice, webmail, webshield, website, devel, announce, supervision, postmaster, patches, patch, owner, news, moderated, moderator, moderators, mailinglist, mailing-list, mailing-lists, mailinglists, mailman, mailsweeper, mails, legal, feedback, experience, backport, backports, autoreply, autobot, autoanswer, autobuild, autopackage, automated, auto, address, addresses, account, accounts
+
+
+# Terms indicating no real name
+BLACKLIST_NO_NAMES = no name, no-name, noname, none, null, n/a, n.a., na, n.a, my name, your name, our name, name, nobody, no author, noauthor
+
+# Privacy-preserving email domains
+BLACKLIST_PRIVACY_EMAILS = users.noreply.github.com
+
+# Machine/hostname patterns
+BLACKLIST_MACHINE_NAMES = think.pad, user-laptop, macbook-pro.local, localhost.localdomain, ubuntu.(none), example.com, imac.local, ubuntu.localdomain, ubuntu.ubuntu-domain, notebook.(none), pivotal.io, pivotal, pc, laptop, desktop, workstation, work-station, work station, ubuntu@ip, brun, bs.local, ubuntu, debian, fedora, centos, redhat, red-hat, alpine, arch, kali, mint, manjaro, opensuse, suse, gentoo, slackware, raspbian, freebsd, openbsd, netbsd, solaris, windows, macos, darwin, raspberry-pi, raspberrypi
+
+# Privacy Email Handling
+EXCLUDE_PRIVACY_EMAILS_FROM_MERGING = false  # If true, aliases with privacy emails won't be merged with anything
+
+# Debug
+DEBUG = false  # Enable verbose debug output
