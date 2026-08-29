@@ -190,7 +190,7 @@ def merge_author_data_per_project(author_data, project_name, output_path, config
 
         rows.append({"project": project_name,
                      "original_author_id": composed_author1,
-                     "dealialized_author_id": composed_author2,
+                     "dealiased_author_id": composed_author2,
                      "is_original_author_weird_id": is_weird_id1,
                      "username": login1 if login1 is not None else "",
                      "cluster_id": uid2})
@@ -198,7 +198,7 @@ def merge_author_data_per_project(author_data, project_name, output_path, config
     author_data = pd.DataFrame(rows)
     if has_username:
         # Propagate the most frequent non-empty username within each cluster.
-        # Group by cluster_id (the representative's uid) rather than dealialized_author_id,
+        # Group by cluster_id (the representative's uid) rather than dealiased_author_id,
         # so that distinct singleton aliases that happen to share the same canonical string
         # are never conflated with each other.
         def most_frequent_username(x):

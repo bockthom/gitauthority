@@ -1,5 +1,6 @@
 numpy
 pandas
 regex
+nicknames>=1.0.1
 scipy
 gambit

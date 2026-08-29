@@ -386,7 +386,7 @@ The scripts require Python 3.7+ and the following packages:
 pip install -r tool_evaluation/requirements.txt
 ```
 
-- `pandas`, `numpy`, `regex`
+- `pandas`, `numpy`, `regex`, `nicknames`
 - `gambit` (for Gambit evaluation — install according to its own documentation)
 - `mergeAliases` module (included in this repository, no separate install needed)
 - World of Code access (for ALFAA evaluation — see `GitHub_dataset_creation/README_GITHUB_DATASET_CREATION.md`)

@@ -19,6 +19,9 @@ COMMA_SUFFIX_MATCH = true  # Match names with comma suffix variations
 ABBREV_FIRST_NAME = true  # Match abbreviated first names
 ABBREV_LAST_NAME = true  # Match abbreviated last names
 ABBREV_MIDDLE_NAME = true  # Match abbreviated middle names
+NICKNAME_MATCH = true  # Match nicknames with full first names (e.g., "Jim Smith" <-> "James Smith")
+NICKNAME_ALLOW_AMBIGUOUS = false  # If true, also trust nicknames with multiple possible full names (e.g., "Bob" could be Robert, Bert, or Bobby) -- raises false-positive risk
+NICKNAME_OVERRIDES =  # Manually trusted nickname:canonical pairs (comma-separated, e.g., bob:robert, liz:elizabeth), always applied regardless of NICKNAME_ALLOW_AMBIGUOUS
 LOCATION = true  # Match aliases with same location and full name
 
 # Thresholds
@@ -40,31 +43,38 @@ REMOVE_TITLES = true  # Remove common titles and suffixes (e.g., "Dr.", "Jr.", "
 REMOVE_PUNCTUATION = true  # Remove punctuation marks from normalized names
 REMOVE_MIDDLE_NAMES = true  # Remove single-character or common first name middle names
 
-# Blacklist Settings
-BLACKLIST_INCLUDE_FIRST_NAMES = true  # Include first names in blacklist for name-based checks
+# Blocklist Settings
+BLOCKLIST_INCLUDE_FIRST_NAMES = true  # Include first names in blocklist for name-based checks
 
-# Blacklist Terms (comma-separated lists)
+# Blocklist Terms (comma-separated lists)
 # Git hosting platforms and issue trackers
-BLACKLIST_GIT_HOSTING = git, github, bitbucket, gitlab, gitbucket, gitea, gogs, gitolite, gitweb, gitolite3, gitolite-admin, gitolite-repositories, jira, bugzilla, launchpad, sourceforge, codeberg, sr.ht, pagure, repo, repos, cran, rstudio
+BLOCKLIST_GIT_HOSTING = git, github, bitbucket, gitlab, gitbucket, gitea, gogs, gitolite, gitweb, gitolite3, gitolite-admin, gitolite-repositories, jira, bugzilla, launchpad, sourceforge, codeberg, sr.ht, pagure, repo, repos, cran, rstudio
 
 # Email service providers
-BLACKLIST_EMAIL_PROVIDERS = gmail, yahoo, hotmail, outlook, live, icloud, mailinator, trashmail, trash-mail, posteo, hey, laposte, protonmail, gmx, comcast, me, mailbox, googlemail, web, qq, 163, 126, free, msn, yandex, fastmail, sina, aol, t-online, naver, seznam, tiscali, wp, orange, wanadoo, libero, rambler, virgilio, sbcglobal, verizon, att, zoho, onet, interia
+BLOCKLIST_EMAIL_PROVIDERS = gmail, yahoo, hotmail, outlook, live, icloud, mailinator, trashmail, trash-mail, posteo, hey, laposte, protonmail, gmx, comcast, me, mailbox, googlemail, web, qq, 163, 126, free, msn, yandex, fastmail, sina, aol, t-online, naver, seznam, tiscali, wp, orange, wanadoo, libero, rambler, virgilio, sbcglobal, verizon, att, zoho, onet, interia
 
 # Generic administrative and system terms
-BLACKLIST_GENERIC_TERMS = admin, administrator, root, support, info, contact, no-reply, noreply, kontakt, contato, hallo, webmaster, mail, email, post, linux, code, system admin, system administrator, domain, sysadmin, team, staff, office, office admin, office administrator, bug, bugs, error, errors, developer, development, engineering, engineer, it, it admin, it administrator, it support, tech, technical, tech support, technical support, dev, help, service, sales, marketing, security, abuse, devnull, nullmailer, mailer-daemon, mailer-deamon, daemon, hostmaster, host, ftp, smtp, pop, imap, user, test, example, demo, guest, anonymous, unknown, system, bot, robot, agent, maint, maintainer, maintainers, i18n, spam, mailing, list, lists, project, hello, hi, hey, greetings, welcome, howdy, hola, bonjour, ciao, salut, namaste, me, my, your, we, our, us, myself, yourself, world, everyone, crew, folks, people, international, universal, general, common, public, private, personal, business, professional, work, home, family, friends, colleague, colleagues, partner, partners, associate, associates, human, users, member, members, customer, customers, client, clients, send, receive, reply, message, messages, write, read, subscribe, unsubscribe, new, old, current, today, now, main, primary, secondary, first, second, default, good, best, great, super, amazing, awesome, nice, cool, testing, sample, temp, temporary, official, unofficial, real, fake, virtual, digital, online, offline, active, inactive, busy, available, away, idle, open, closed, start, stop, begin, end, finish, complete, incomplete, alpha, beta, rsvp, stable, unstable, draft, final, version, release, update, upgrade, downgrade, install, uninstall, configure, setup, reset, restart, reboot, shutdown, poweroff, sleep, hibernate, lock, unlock, package, packages, kernel, webnews, weboffice, webmail, webshield, website, devel, announce, supervision, postmaster, patches, patch, owner, news, moderated, moderator, moderators, mailinglist, mailing-list, mailing-lists, mailinglists, mailman, mailsweeper, mails, legal, feedback, experience, backport, backports, autoreply, autobot, autoanswer, autobuild, autopackage, automated, auto, address, addresses, account, accounts
+BLOCKLIST_GENERIC_TERMS = admin, administrator, root, support, info, contact, no-reply, noreply, kontakt, contato, hallo, webmaster, mail, email, post, linux, code, system admin, system administrator, domain, sysadmin, team, staff, office, office admin, office administrator, bug, bugs, error, errors, developer, development, engineering, engineer, it, it admin, it administrator, it support, tech, technical, tech support, technical support, dev, help, service, sales, marketing, security, abuse, devnull, nullmailer, mailer-daemon, mailer-deamon, daemon, hostmaster, host, ftp, smtp, pop, imap, user, test, example, demo, guest, anonymous, unknown, system, bot, robot, agent, maint, maintainer, maintainers, i18n, spam, mailing, list, lists, project, hello, hi, hey, greetings, welcome, howdy, hola, bonjour, ciao, salut, namaste, me, my, your, we, our, us, myself, yourself, world, everyone, crew, folks, people, international, universal, general, common, public, private, personal, business, professional, work, home, family, friends, colleague, colleagues, partner, partners, associate, associates, human, users, member, members, customer, customers, client, clients, send, receive, reply, message, messages, write, read, subscribe, unsubscribe, new, old, current, today, now, main, primary, secondary, first, second, default, good, best, great, super, amazing, awesome, nice, cool, testing, sample, temp, temporary, official, unofficial, real, fake, virtual, digital, online, offline, active, inactive, busy, available, away, idle, open, closed, start, stop, begin, end, finish, complete, incomplete, alpha, beta, rsvp, stable, unstable, draft, final, version, release, update, upgrade, downgrade, install, uninstall, configure, setup, reset, restart, reboot, shutdown, poweroff, sleep, hibernate, lock, unlock, package, packages, kernel, webnews, weboffice, webmail, webshield, website, devel, announce, supervision, postmaster, patches, patch, owner, news, moderated, moderator, moderators, mailinglist, mailing-list, mailing-lists, mailinglists, mailman, mailsweeper, mails, legal, feedback, experience, backport, backports, autoreply, autobot, autoanswer, autobuild, autopackage, automated, auto, address, addresses, account, accounts
 
 
 # Terms indicating no real name
-BLACKLIST_NO_NAMES = no name, no-name, noname, none, null, n/a, n.a., na, n.a, my name, your name, our name, name, nobody, no author, noauthor
+BLOCKLIST_NO_NAMES = no name, no-name, noname, none, null, n/a, n.a., na, n.a, my name, your name, our name, name, nobody, no author, noauthor
 
 # Privacy-preserving email domains
-BLACKLIST_PRIVACY_EMAILS = users.noreply.github.com
+BLOCKLIST_PRIVACY_EMAILS = users.noreply.github.com
 
 # Machine/hostname patterns
-BLACKLIST_MACHINE_NAMES = think.pad, user-laptop, macbook-pro.local, localhost.localdomain, ubuntu.(none), example.com, imac.local, ubuntu.localdomain, ubuntu.ubuntu-domain, notebook.(none), pivotal.io, pivotal, pc, laptop, desktop, workstation, work-station, work station, ubuntu@ip, brun, bs.local, ubuntu, debian, fedora, centos, redhat, red-hat, alpine, arch, kali, mint, manjaro, opensuse, suse, gentoo, slackware, raspbian, freebsd, openbsd, netbsd, solaris, windows, macos, darwin, raspberry-pi, raspberrypi
+BLOCKLIST_MACHINE_NAMES = think.pad, user-laptop, macbook-pro.local, localhost.localdomain, ubuntu.(none), example.com, imac.local, ubuntu.localdomain, ubuntu.ubuntu-domain, notebook.(none), pivotal.io, pivotal, pc, laptop, desktop, workstation, work-station, work station, ubuntu@ip, brun, bs.local, ubuntu, debian, fedora, centos, redhat, red-hat, alpine, arch, kali, mint, manjaro, opensuse, suse, gentoo, slackware, raspbian, freebsd, openbsd, netbsd, solaris, windows, macos, darwin, raspberry-pi, raspberrypi
+
+# Synthetic placeholders some upstream extraction tools inject when an author's email could not be parsed/resolved
+# (punctuation variants like could_not_resolve/couldnotresolve match automatically via normalization, no need to list them)
+BLOCKLIST_UNRESOLVABLE_PLACEHOLDERS = could.not.resolve, could.not.resolve@unknown.tld, unknown.tld
 
 # Privacy Email Handling
 EXCLUDE_PRIVACY_EMAILS_FROM_MERGING = false  # If true, aliases with privacy emails won't be merged with anything
+
+# First-Name-Only Handling
+EXCLUDE_FIRST_NAME_ONLY_FROM_MERGING = false  # If true, aliases whose name is just a common first name (e.g., "Josh" alone) won't be merged with anything
 
 # Debug
 DEBUG = false  # Enable verbose debug output

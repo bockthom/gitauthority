@@ -11,8 +11,11 @@ These scripts use the relationship between GitHub usernames and their author ali
 - `evaluate_gambit.py` - Evaluates Gambit algorithm on GitHub data
 - `evaluate_gitAuthority.py` - Evaluates GitAuthority algorithm on GitHub data
 - `evaluate_alfaa.py` - Evaluates ALFAA algorithm on GitHub data (requires World of Code)
+- `compute_confidence_intervals.py` - Computes confidence intervals for the aggregated metrics of an evaluation run (see [Computing Confidence Intervals](#computing-confidence-intervals) below)
+- `sample_stratified_by_alias_count.py` - Draws a stratified sample of GitHub usernames by alias count, for building a manually-verified ground truth (see [Building a Manually-Verified Precision Ground Truth](#building-a-manually-verified-precision-ground-truth) below)
+- `build_manual_precision_ground_truth.py` - Turns that sample into a DRE-format ground truth file for whole-pool evaluation (see [Building a Manually-Verified Precision Ground Truth](#building-a-manually-verified-precision-ground-truth) below)
 
-All three scripts compute precision, recall, F1 score, accuracy, balanced accuracy, splitting, and lumping metrics on a per-GitHub-username basis and in aggregate.
+All three evaluation scripts (`evaluate_gambit.py`, `evaluate_gitAuthority.py`, `evaluate_alfaa.py`) compute precision, recall, F1 score, accuracy, balanced accuracy, splitting, and lumping metrics on a per-GitHub-username basis and in aggregate.
 
 ## GitHub Dataset Configurations
 
@@ -228,7 +231,7 @@ Contains aggregate statistics:
 - **Filtering statistics** (if applicable):
   - Number of usernames removed due to organizational accounts
   - Number of usernames removed due to max threshold
-  - Statistics about removed and remaining usernames
+  - Statistics about removed and remaining usernames, including average, median, standard deviation, maximum, and percentiles (p10, p25, p50, p75, p90, p95, p99, p99.5, p99.9, p99.99) of authors per identity
 
 ### 4. Chunk Results (parallel processing only)
 
@@ -271,12 +274,34 @@ Average authors per removed org identity: <value>
 Median authors per removed org identity: <value>
 Std dev authors per removed org identity: <value>
 Maximum authors per removed org identity: <value>
+Percentiles of authors per removed org identity:
+  p10: <value>
+  p25: <value>
+  p50: <value>
+  p75: <value>
+  p90: <value>
+  p95: <value>
+  p99: <value>
+  p99.5: <value>
+  p99.9: <value>
+  p99.99: <value>
 
 Identities removed (max threshold): <count>
 Average authors per remaining identity (before max): <value>
 Median authors per remaining identity (before max): <value>
 Std dev authors per remaining identity (before max): <value>
 Maximum authors per remaining identity (before max): <value>
+Percentiles of authors per remaining identity (before max filtering):
+  p10: <value>
+  p25: <value>
+  p50: <value>
+  p75: <value>
+  p90: <value>
+  p95: <value>
+  p99: <value>
+  p99.5: <value>
+  p99.9: <value>
+  p99.99: <value>
 ```
 
 ## Evaluation Metrics
@@ -374,7 +399,7 @@ The scripts require Python 3.7+ and the following packages:
 pip install -r GitHub_dataset_evaluation/requirements.txt
 ```
 
-- `pandas`, `numpy`, `regex`, `scipy`
+- `pandas`, `numpy`, `regex`, `scipy`, `nicknames`
 - `gambit` (for Gambit evaluation — install according to its own documentation)
 - `mergeAliases` module (included in this repository, no separate install needed)
 - World of Code access (for ALFAA evaluation — see `GitHub_dataset_creation/README_GITHUB_DATASET_CREATION.md`)
@@ -526,5 +551,81 @@ python GitHub_dataset_evaluation/evaluate_alfaa.py GitHub_data
 python GitHub_dataset_evaluation/compute_confidence_intervals.py \
   GitHub_dataset_evaluation/evaluation_results_alfaa_GitHub_data_per_username.csv
 ```
+
+## Building a Manually-Verified Precision Ground Truth
+
+The GitHub-username-based ground truth used above is only as trustworthy as the assumption "same username implies same person" — it can miss real false positives that a per-username evaluation can never expose in the first place, because merges are structurally impossible across usernames. `sample_stratified_by_alias_count.py` and `build_manual_precision_ground_truth.py` build a small, manually-audited ground truth that instead evaluates GitAuthority once over an entire pool of aliases (spanning many usernames), via `tool_evaluation/evaluate_gitAuthority_groundtruth.py --dre` (see `tool_evaluation/README_TOOL_EVALUATION.md`). This makes cross-username merges real, checkable pairs instead of being structurally impossible.
+
+### Step 1: Draw a stratified sample of usernames
+
+```bash
+python GitHub_dataset_evaluation/sample_stratified_by_alias_count.py [OPTIONS]
+```
+
+Streams a GitHub dataset CSV (columns `git_username`, `author`, `organization_account`, one row per alias) and reservoir-samples a fixed number of usernames for each alias-count stratum in a given range, without loading the full file into memory (usernames must be grouped contiguously, though not globally sorted).
+
+**Options**:
+
+- `--input`: Path to the source CSV (default: `GitHub_data_final/evaluation_dataset_only_users_after_filtering_org_after_dedup.csv`)
+- `--min-aliases`, `--max-aliases`: Alias-count range to sample from (default: 2–10)
+- `--n-per-stratum`: Target number of usernames per alias count (default: 20)
+- `--seed`: Random seed for reproducibility (default: 42)
+- `--extend-from`: Path to a previous `*_summary.csv` whose usernames must be kept as-is; only the additional slots needed to reach `--n-per-stratum` are newly sampled from the remaining pool — use this to grow an already partially-labeled sample without re-sampling (and re-auditing) usernames you already kept
+- `--output`: Output CSV with the sampled usernames' full alias rows (default: `sampled_usernames_stratified.csv`)
+- `--summary-output`: Output CSV listing just `num_aliases`, `git_username` for the sample (default: `sampled_usernames_stratified_summary.csv`)
+- `--stats-output`: Output text file with the sampling statistics (default: `sampled_usernames_stratified_stats.txt`)
+
+**Example**:
+
+```bash
+python GitHub_dataset_evaluation/sample_stratified_by_alias_count.py \
+  --min-aliases 2 --max-aliases 10 --n-per-stratum 20 \
+  --output sampled_usernames_stratified_40.csv \
+  --summary-output sampled_usernames_stratified_40_summary.csv
+```
+
+### Step 2: Manually audit the sample
+
+Inspect the sampled usernames (e.g., via the summary CSV) and correct any cases where "same username implies same person" doesn't hold (shared/bot/org accounts, or one real person using two accounts).
+
+### Step 3: Build the DRE-format ground truth
+
+```bash
+python GitHub_dataset_evaluation/build_manual_precision_ground_truth.py [OPTIONS]
+```
+
+Turns the stratified sample into a DRE-format ground truth dataset for whole-pool evaluation. Each distinct GitHub username becomes one `dre_id` (an anonymized integer, not the literal username — assignment is shuffled by `--seed` so ids don't leak username order), and every alias of that username becomes one `woc_id` row under that `dre_id`.
+
+**Options**:
+
+- `--input`: Stratified sample CSV with columns `git_username`, `author`, `organization_account` (default: `sampled_usernames_stratified_40.csv`, i.e., the `--output` of Step 1)
+- `--prefix`: Output filename prefix, should describe the source dataset and sample size (default: `github_final_sample360`)
+- `--output-dir`: Directory to write the output files into (default: current directory)
+- `--seed`: Random seed used to shuffle `dre_id` assignment (default: 42)
+
+**Produces three files**:
+
+- `<prefix>_raw.csv`: DRE file reflecting the sample as-is (one `dre_id` per original username, unmodified)
+- `<prefix>_corrected.csv`: Byte-identical starting copy of the same file, meant to be hand-edited — change an alias's `dre_id` to a value used nowhere else to split it into its own identity, or to another group's `dre_id` to merge it there, in order to fix wrongly-grouped aliases found during the manual audit. Never edit `dre_id` in the `_raw.csv` file.
+- `<prefix>_username_map.csv`: `dre_id` -> original GitHub username, kept separately for your own reference/auditing. This is not part of the DRE format and not read by the evaluation script — the two files above never carry the literal username.
+
+**Example**:
+
+```bash
+python GitHub_dataset_evaluation/build_manual_precision_ground_truth.py \
+  --input sampled_usernames_stratified_40.csv \
+  --prefix github_final_sample360 \
+  --output-dir GitHub_dataset_evaluation/
+```
+
+### Step 4: Evaluate against the corrected ground truth
+
+```bash
+python tool_evaluation/evaluate_gitAuthority_groundtruth.py \
+  --dre GitHub_dataset_evaluation/github_final_sample360_corrected.csv \
+  --output results_gitAuthority_precision_sample360.csv
+```
+
+See `tool_evaluation/README_TOOL_EVALUATION.md` for details on `evaluate_gitAuthority_groundtruth.py` and the DRE ground-truth format.
 
 

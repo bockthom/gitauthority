@@ -11,6 +11,7 @@ import regex
 from alias import Alias
 from collections import Counter
 from itertools import combinations, product
+from nicknames import NickNamer
 
 import io
 
@@ -49,13 +50,16 @@ def load_config(config_path=DEFAULT_CONFIG):
         'ABBREV_FIRST_NAME': True,
         'ABBREV_LAST_NAME': True,
         'ABBREV_MIDDLE_NAME': True,
+        'NICKNAME_MATCH': True,
+        'NICKNAME_ALLOW_AMBIGUOUS': False,
         'LOCATION': True,
         'THR_MIN': 1,
         'THR_MAX': 40,
         'ENABLE_GERMAN_DETECTION': True,
         'ENABLE_DUAL_NORMALIZATION': True,
-        'BLACKLIST_INCLUDE_FIRST_NAMES': True,
+        'BLOCKLIST_INCLUDE_FIRST_NAMES': True,
         'EXCLUDE_PRIVACY_EMAILS_FROM_MERGING': False,
+        'EXCLUDE_FIRST_NAME_ONLY_FROM_MERGING': False,
         # Preprocessing options
         'NORMALIZE_UNICODE_NFC': True,
         'NORMALIZE_LEETSPEAK': True,
@@ -95,9 +99,9 @@ def load_config(config_path=DEFAULT_CONFIG):
                     try:
                         config[key] = int(value_part)
                     except ValueError:
-                        # Check if it's a comma-separated list (for blacklist terms)
-                        # Blacklist keys are treated as lists (even single items)
-                        if key.startswith('BLACKLIST_') and key not in ['BLACKLIST_INCLUDE_FIRST_NAMES']:
+                        # Check if it's a comma-separated list (for blocklist terms)
+                        # Blocklist keys are treated as lists (even single items)
+                        if key.startswith('BLOCKLIST_') and key not in ['BLOCKLIST_INCLUDE_FIRST_NAMES']:
                             if ',' in value_part:
                                 # Parse as comma-separated list, strip whitespace from each item
                                 config[key] = [item.strip() for item in value_part.split(',')]
@@ -404,12 +408,16 @@ def normalize_for_comparison(text, email_domain=None, location=None, force_germa
             # Years (1900-2099) - match as standalone words
             timezone_and_year_patterns.extend([r'\b19\d{2}\b', r'\b20\d{2}\b'])
 
-        # Remove from beginning and end
-        for pattern in timezone_and_year_patterns:
-            # Remove from beginning (with optional trailing spaces)
-            text = re.sub(r'^' + pattern + r'\s+', '', text)
-            # Remove from end (with optional leading spaces)
-            text = re.sub(r'\s+' + pattern + r'$', '', text)
+        # Remove from beginning and end, repeatedly, until no more matches
+        # (handles multiple stacked tokens, e.g., "cet 2020 gmt Name")
+        combined_begin = re.compile(r'^(?:' + '|'.join(timezone_and_year_patterns) + r')\s+')
+        combined_end = re.compile(r'\s+(?:' + '|'.join(timezone_and_year_patterns) + r')$')
+        while True:
+            new_text = combined_begin.sub('', text)
+            new_text = combined_end.sub('', new_text)
+            if new_text == text:
+                break
+            text = new_text
 
     # Clean up extra whitespace that may have been created
     text = re.sub(r'\s+', ' ', text).strip()
@@ -470,8 +478,8 @@ def normalize_for_comparison(text, email_domain=None, location=None, force_germa
     if CONFIG.get('REMOVE_MIDDLE_NAMES', True) and len(words) == 3:
         middle_word = words[1]
         # Remove middle word if it's a single character (initial) or a common first name
-        # Note: blacklist contains capitalized names, so we need case-insensitive comparison
-        if len(middle_word) == 1 or middle_word.lower() in [n.lower() for n in blacklist_first_names]:
+        # Note: blocklist contains capitalized names, so we need case-insensitive comparison
+        if len(middle_word) == 1 or middle_word.lower() in [n.lower() for n in blocklist_first_names]:
             words = [words[0], words[2]]  # Keep only first and last
 
     return ' '.join(words)
@@ -530,11 +538,12 @@ COMMA_SUFFIX_MATCH    = 'COMMA_SUFFIX_MATCH'
 ABBREV_FIRST_NAME     = 'ABBREV_FIRST_NAME'
 ABBREV_LAST_NAME      = 'ABBREV_LAST_NAME'
 ABBREV_MIDDLE_NAME    = 'ABBREV_MIDDLE_NAME'
+NICKNAME_MATCH        = 'NICKNAME_MATCH'
 
 THR_MIN = CONFIG.get('THR_MIN', 1)
 THR_MAX = CONFIG.get('THR_MAX', 40)
 THR_MIN_LENGTH = CONFIG.get('THR_MIN_LENGTH', 3)
-MIN_NAME_PART_LENGTH = 2  # Minimum length of an individual name component (e.g. last name in abbreviation keys)
+MIN_NAME_PART_LENGTH = 2  # Minimum length of an individual name component (e.g., last name in abbreviation keys)
 
 unmask = {}
 
@@ -568,18 +577,20 @@ def get_first_names():
     return first_names
 
 
-# Default blacklist values (used if not specified in config)
-default_blacklist_git_hosting = ["git", "github", "bitbucket", "gitlab", "gitbucket", "gitea", "gogs", "gitolite", "gitweb",
-                         "gitolite3", "gitolite-admin", "gitolite-repositories", "jira", "bugzilla", "launchpad", "sourceforge", "codeberg", "sr.ht", "pagure", "repo", "repos"] # generated by GitHub Copilot
+# Default blocklist values (used if not specified in config)
+default_blocklist_git_hosting = ["git", "github", "bitbucket", "gitlab", "gitbucket", "gitea", "gogs", "gitolite", "gitweb",
+                         "gitolite3", "gitolite-admin", "gitolite-repositories", "jira", "bugzilla", "launchpad", "sourceforge", "codeberg", "sr.ht", "pagure", "repo", "repos", "cran", "rstudio"] # generated by GitHub Copilot
 
-default_blacklist_email_providers = ["gmail", "yahoo", "hotmail", "outlook", "live", "icloud", "mailinator", "trashmail", "trash-mail"] # generated by GitHub Copilot
+default_blocklist_email_providers = ["gmail", "yahoo", "hotmail", "outlook", "live", "icloud", "mailinator", "trashmail", "trash-mail", # generated by GitHub Copilot
+                         "posteo", "hey", "laposte", "protonmail", "gmx", "comcast", "me", "mailbox", "googlemail", "web", "qq", "163", "126", "free", "msn", "yandex", "fastmail",
+                         "sina", "aol", "t-online", "naver", "seznam", "tiscali", "wp", "orange", "wanadoo", "libero", "rambler", "virgilio", "sbcglobal", "verizon", "att", "zoho", "onet", "interia"]
 
-default_blacklist_generic_terms = ["admin", "administrator", "root", "support", "info", "contact", "no-reply", "noreply", "webmaster", "mail", "email", "post", "linux", "code", "system admin", "system administrator", "domain",
+default_blocklist_generic_terms = ["admin", "administrator", "root", "support", "info", "contact", "no-reply", "noreply", "kontakt", "contato", "hallo", "webmaster", "mail", "email", "post", "linux", "code", "system admin", "system administrator", "domain",
                            "sysadmin", "team", "staff", "office", "office admin", "office administrator", "bug", "bugs", "error", "errors", # generated by GitHub Copilot
                            "developer", "development", "engineering", "engineer", "it", "it admin", "it administrator", "it support", "tech", "technical", "tech support", "technical support", "dev", # generated by GitHub Copilot
-                           "help", "service", "sales", "marketing", "security", "abuse", "devnull", "nullmailer", "mailer-daemon", "daemon", "hostmaster", "host", "ftp", "smtp", "pop", "imap", # generated by GitHub Copilot
+                           "help", "service", "sales", "marketing", "security", "abuse", "devnull", "nullmailer", "mailer-daemon", "mailer-deamon", "daemon", "hostmaster", "host", "ftp", "smtp", "pop", "imap", # generated by GitHub Copilot
                            "user", "test", "example", "demo", "guest", "anonymous", "unknown", "system", "service", "bot", "robot", "agent", # generated by GitHub Copilot
-                           "development", "dev", "developer", "maint", "maintainer", "i18n", "spam", "bug", "bugs", "mailing", "list", "contact", "project", # taken from Goeminne and Mens, Science of Computer Programming, 2013
+                           "development", "dev", "developer", "maint", "maintainer", "maintainers", "i18n", "spam", "bug", "bugs", "mailing", "list", "lists", "contact", "project", # taken from Goeminne and Mens, Science of Computer Programming, 2013
                            "hello", "hi", "hey", "greetings", "welcome", "howdy", "hola", "bonjour", "ciao", "salut", "namaste", # suggested by GitHub Copilot
                            "me", "my", "your", "we", "our", "us", "myself", "yourself", "world", "everyone", "crew", "folks", "people", # suggested by GitHub Copilot
                            "international", "universal", "general", "common", "public", "private", "personal", "business", "professional", "work", "home", "family", "friends", # suggested by GitHub Copilot
@@ -597,75 +608,139 @@ default_blacklist_generic_terms = ["admin", "administrator", "root", "support", 
                            "mailman", "mailsweeper", "mails", "legal", "feedback", "experience", "backport", "backports", "autoreply", "autobot", "autoanswer", "autobuild", # found on the Linux Kernel Mailing List
                            "autopackage", "automated", "auto", "address", "addresses", "account", "accounts"] # found on the Linux Kernel Mailing List
 
-default_blacklist_no_names = ["no name", "no-name", "noname", "none", "null", "n/a", "n.a.", "na", "n.a", "my name", "your name", "our name", "name", # generated by GitHub Copilot
-                      "nobody", "no author"]
+default_blocklist_no_names = ["no name", "no-name", "noname", "none", "null", "n/a", "n.a.", "na", "n.a", "my name", "your name", "our name", "name", # generated by GitHub Copilot
+                      "nobody", "no author", "noauthor"]
 
-default_blacklist_privacy_emails = ["users.noreply.github.com"] # Privacy-preserving email domains that don't reveal real identity
+default_blocklist_privacy_emails = ["users.noreply.github.com"] # Privacy-preserving email domains that don't reveal real identity
 
-default_blacklist_machine_names = ["think.pad", "user-laptop", "macbook-pro.local", "localhost.localdomain", "ubuntu.(none)", "example.com", "imac.local", "ubuntu.localdomain", "ubuntu.ubuntu-domain",
+default_blocklist_machine_names = ["think.pad", "user-laptop", "macbook-pro.local", "localhost.localdomain", "ubuntu.(none)", "example.com", "imac.local", "ubuntu.localdomain", "ubuntu.ubuntu-domain",
                            "notebook.(none)", "pivotal.io", "pivotal", "pc", "laptop", "desktop", "workstation", "work-station", "work station", "ubuntu@ip", "brun", "bs.local", # taken from Fry et al 2020
                            "ubuntu", "debian", "fedora", "centos", "redhat", "red-hat", "alpine", "arch", "kali", "mint", "manjaro", "opensuse", "suse", "gentoo", # OS and distro names
                            "slackware", "raspbian", "freebsd", "openbsd", "netbsd", "solaris", "windows", "macos", "darwin", "raspberry-pi", "raspberrypi"] # OS and distro names
 
-# Get configurable blacklists from CONFIG, or use defaults
-blacklist_git_hosting = CONFIG.get('BLACKLIST_GIT_HOSTING', default_blacklist_git_hosting)
-blacklist_email_providers = CONFIG.get('BLACKLIST_EMAIL_PROVIDERS', default_blacklist_email_providers)
-blacklist_generic_terms = CONFIG.get('BLACKLIST_GENERIC_TERMS', default_blacklist_generic_terms)
-blacklist_no_names = CONFIG.get('BLACKLIST_NO_NAMES', default_blacklist_no_names)
-blacklist_privacy_emails = CONFIG.get('BLACKLIST_PRIVACY_EMAILS', default_blacklist_privacy_emails)
-blacklist_machine_names = CONFIG.get('BLACKLIST_MACHINE_NAMES', default_blacklist_machine_names)
-blacklist_first_names = get_first_names()
+# Synthetic placeholders some upstream extraction tools inject when an author's
+# real email could not be parsed/resolved. These are shared across many unrelated
+# people the upstream tool failed to resolve, so they must never be trusted as a
+# match signal (via COMP_EMAIL_PREFIX / SIMPLE_EMAIL_PREFIX / EMAIL / DOMAIN).
+default_blocklist_unresolvable_placeholders = [
+    "could.not.resolve",  # local-part with a randomized domain; get_blocklist() normalizes
+                           # this entry too, so punctuation variants (could_not_resolve,
+                           # couldnotresolve, ...) match without listing each one
+    "could.not.resolve@unknown.tld", "unknown.tld",  # fixed placeholder email/domain
+]
 
-def get_blacklist(include_first_names=True):
+# Get configurable blocklists from CONFIG, or use defaults
+blocklist_git_hosting = CONFIG.get('BLOCKLIST_GIT_HOSTING', default_blocklist_git_hosting)
+blocklist_email_providers = CONFIG.get('BLOCKLIST_EMAIL_PROVIDERS', default_blocklist_email_providers)
+blocklist_generic_terms = CONFIG.get('BLOCKLIST_GENERIC_TERMS', default_blocklist_generic_terms)
+blocklist_no_names = CONFIG.get('BLOCKLIST_NO_NAMES', default_blocklist_no_names)
+blocklist_privacy_emails = CONFIG.get('BLOCKLIST_PRIVACY_EMAILS', default_blocklist_privacy_emails)
+blocklist_machine_names = CONFIG.get('BLOCKLIST_MACHINE_NAMES', default_blocklist_machine_names)
+blocklist_unresolvable_placeholders = CONFIG.get('BLOCKLIST_UNRESOLVABLE_PLACEHOLDERS', default_blocklist_unresolvable_placeholders)
+blocklist_first_names = get_first_names()
+blocklist_first_names_lower = set(n.lower() for n in blocklist_first_names)
+
+_nicknamer = NickNamer()
+
+def get_nickname_canonicals(name, allow_ambiguous=False, overrides=None):
     """
-    Returns a list of common first names and email-related terms to be used as a blacklist.
+    Return the set of canonical full names `name` could resolve to as a nickname.
+    `overrides` (dict of nickname -> canonical) is always trusted if `name` is in it.
+    Otherwise: an unambiguous package mapping (single canonical, e.g., "josh" ->
+    "joshua") is always returned; an ambiguous one (e.g., "bob" -> "robert"/"bert"/
+    "bobby") is only returned if `allow_ambiguous` is True. Returns an empty set
+    if `name` isn't a nickname of anything.
+    """
+    if overrides and name in overrides:
+        return {overrides[name]}
+    canonicals = _nicknamer.canonicals_of(name)
+    if len(canonicals) == 1 or (len(canonicals) > 1 and allow_ambiguous):
+        return canonicals
+    return set()
+
+def parse_nickname_overrides(raw_overrides):
+    """Parse a 'nickname:canonical' list (as loaded from config) into a dict."""
+    overrides = {}
+    if not raw_overrides:
+        return overrides
+    if isinstance(raw_overrides, str):
+        raw_overrides = [raw_overrides]
+    for entry in raw_overrides:
+        if ':' in entry:
+            nickname, canonical = entry.split(':', 1)
+            overrides[nickname.strip().lower()] = canonical.strip().lower()
+    return overrides
+
+def get_blocklist(include_first_names=True):
+    """
+    Returns a list of common first names and email-related terms to be used as a blocklist.
     This list is used to filter out common names and terms that are unlikely to be associated with real users.
-    The blacklist includes common first names, email providers, and generic terms that are often used in email addresses.
+    The blocklist includes common first names, email providers, and generic terms that are often used in email addresses.
     Args:
-        include_first_names (bool): If True, includes common first names in the blacklist.
+        include_first_names (bool): If True, includes common first names in the blocklist.
     Returns: a list of strings representing common first names and email-related terms.
     """
 
-    blacklist = []
+    blocklist = blocklist_git_hosting + blocklist_email_providers + blocklist_generic_terms + blocklist_no_names + blocklist_privacy_emails + blocklist_machine_names + blocklist_unresolvable_placeholders
 
-    blacklist = blacklist + blacklist_git_hosting + blacklist_email_providers + blacklist_generic_terms + blacklist_no_names + blacklist_privacy_emails + blacklist_machine_names
+    # convert blocklist to lowercase
+    blocklist = [x.lower() for x in blocklist]
+
+    # Also add each term's normalized (punctuation-stripped) form, so a single
+    # human-readable entry (e.g., "could.not.resolve") also blocks equivalent
+    # variants (could_not_resolve, could-not-resolve, couldnotresolve, ...)
+    # without having to list each one. Excludes first names (added below):
+    # normalizing tens of thousands of names on every call is too slow and
+    # first names rarely carry meaningful punctuation variance anyway.
+    normalized_terms = set()
+    for term in blocklist:
+        normalized_terms.update(normalize_for_comparison_dual(term))
+        # Also add the compound (whitespace-stripped) form, mirroring the exact
+        # transform applied to multi-word alias names when building d_name_uid
+        # (see the "compound_name" logic below) -- e.g. "your name" -> "yourname".
+        # Without this, a blocklisted multi-word phrase blocks the space-preserved
+        # d_name_uid bucket for that name but not the separate compound bucket the
+        # same alias also lands in, letting FULL_NAME match through the compound
+        # form alone.
+        compound_term = (regex.sub(r'[ .\-_\+]', '', term) if term[:1].isdigit()
+                          else regex.sub(r'[ .\-_\d\+]', '', term))
+        if compound_term:
+            normalized_terms.add(compound_term)
+    blocklist = list(set(blocklist) | normalized_terms)
 
     if (include_first_names):
-        blacklist = blacklist + blacklist_first_names
+        blocklist = blocklist + [x.lower() for x in blocklist_first_names]
 
-    # convert blacklist to lowercase
-    blacklist = [x.lower() for x in blacklist]
-
-    return blacklist
+    return blocklist
 
 
-def contains_blacklisted_term(text, blacklist):
+def contains_blocklisted_term(text, blocklist):
     """
-    Check if a text (e.g., email prefix) contains any blacklisted term as a substring.
+    Check if a text (e.g., email prefix) contains any blocklisted term as a substring.
 
     This prevents merging people based on generic terms in their email addresses,
     like "bugzilla", "gnome", "ubuntu", etc.
 
     Args:
         text (str): The text to check (typically an email prefix)
-        blacklist (list): List of blacklisted terms
+        blocklist (list): List of blocklisted terms
 
     Returns:
-        bool: True if text contains any blacklisted term, False otherwise
+        bool: True if text contains any blocklisted term, False otherwise
     """
     if not text:
         return False
 
     text_lower = text.lower()
 
-    # Check if text exactly matches a blacklisted term
-    if text_lower in blacklist:
+    # Check if text exactly matches a blocklisted term
+    if text_lower in blocklist:
         return True
 
-    # Check if text contains any blacklisted term as a substring
+    # Check if text contains any blocklisted term as a substring
     # Only check for terms that are 4+ characters to avoid false positives
     # (e.g., we don't want to block "john" in "johnson")
-    for term in blacklist:
+    for term in blocklist:
         if len(term) >= 4 and term in text_lower:
             return True
 
@@ -685,19 +760,21 @@ def do_merging(data, file_path, config_path=None):
     """
 
     global CONFIG, THR_MIN, THR_MAX, THR_MIN_LENGTH
-    global blacklist_git_hosting, blacklist_email_providers, blacklist_generic_terms
-    global blacklist_no_names, blacklist_privacy_emails, blacklist_machine_names
+    global blocklist_git_hosting, blocklist_email_providers, blocklist_generic_terms
+    global blocklist_no_names, blocklist_privacy_emails, blocklist_machine_names
+    global blocklist_unresolvable_placeholders
 
     CONFIG = load_config(config_path or DEFAULT_CONFIG)
     THR_MIN = CONFIG.get('THR_MIN', 1)
     THR_MAX = CONFIG.get('THR_MAX', 40)
     THR_MIN_LENGTH = CONFIG.get('THR_MIN_LENGTH', 3)
-    blacklist_git_hosting = CONFIG.get('BLACKLIST_GIT_HOSTING', default_blacklist_git_hosting)
-    blacklist_email_providers = CONFIG.get('BLACKLIST_EMAIL_PROVIDERS', default_blacklist_email_providers)
-    blacklist_generic_terms = CONFIG.get('BLACKLIST_GENERIC_TERMS', default_blacklist_generic_terms)
-    blacklist_no_names = CONFIG.get('BLACKLIST_NO_NAMES', default_blacklist_no_names)
-    blacklist_privacy_emails = CONFIG.get('BLACKLIST_PRIVACY_EMAILS', default_blacklist_privacy_emails)
-    blacklist_machine_names = CONFIG.get('BLACKLIST_MACHINE_NAMES', default_blacklist_machine_names)
+    blocklist_git_hosting = CONFIG.get('BLOCKLIST_GIT_HOSTING', default_blocklist_git_hosting)
+    blocklist_email_providers = CONFIG.get('BLOCKLIST_EMAIL_PROVIDERS', default_blocklist_email_providers)
+    blocklist_generic_terms = CONFIG.get('BLOCKLIST_GENERIC_TERMS', default_blocklist_generic_terms)
+    blocklist_no_names = CONFIG.get('BLOCKLIST_NO_NAMES', default_blocklist_no_names)
+    blocklist_privacy_emails = CONFIG.get('BLOCKLIST_PRIVACY_EMAILS', default_blocklist_privacy_emails)
+    blocklist_machine_names = CONFIG.get('BLOCKLIST_MACHINE_NAMES', default_blocklist_machine_names)
+    blocklist_unresolvable_placeholders = CONFIG.get('BLOCKLIST_UNRESOLVABLE_PLACEHOLDERS', default_blocklist_unresolvable_placeholders)
 
     # Clear global unmask dictionary to prevent memory leak across multiple calls
     global unmask
@@ -715,14 +792,17 @@ def do_merging(data, file_path, config_path=None):
     uid_name_mail = io.StringIO(uid_name_mail)
     reader = DictReader(uid_name_mail)
 
-    # Create two blacklists:
-    # 1. Full blacklist (with first names) - for name-based checks
-    blacklist = get_blacklist(include_first_names=CONFIG.get('BLACKLIST_INCLUDE_FIRST_NAMES', True))
+    # Create two blocklists:
+    # 1. Full blocklist (with first names) - for name-based checks
+    blocklist = get_blocklist(include_first_names=CONFIG.get('BLOCKLIST_INCLUDE_FIRST_NAMES', True))
 
-    # 2. Blacklist without first names - for email prefix checks
+    # 2. Blocklist without first names - for email prefix checks
     # This prevents blocking legitimate personal email prefixes
     # while still blocking generic system and organizational terms
-    blacklist_no_first_names = get_blacklist(include_first_names=False)
+    blocklist_no_first_names = get_blocklist(include_first_names=False)
+    # set(): O(1) hash lookup instead of contains_blocklisted_term's O(n) substring
+    # scan, for the per-alias normalized-prefix exact-match check below.
+    blocklist_no_first_names_set = set(blocklist_no_first_names)
 
     # Helper structures
     d_email_uid = {}
@@ -783,7 +863,7 @@ def do_merging(data, file_path, config_path=None):
 
         a = Alias(uid, login, name, email, location, user_type, None, None, None, is_weird_id)
         #if not is_alias_weird_id(a):
-        is_weird = is_alias_weird_id(a)
+        is_weird = is_alias_weird_id(a, blocklist, blocklist_no_first_names)
         a.set_weird(is_weird)
         row['is_weird_id'] = is_weird
         raw[uid] = json.dumps(row)
@@ -806,10 +886,22 @@ def do_merging(data, file_path, config_path=None):
         # - prefix
         d_uid_prefix[a.uid] = a.email_prefix
         d_uid_comp_prefix[a.uid] = a.email_prefix
+        # Skip populating prefix lookups entirely for blocklisted prefixes, so that no
+        # derived form (normalized, compound, or reversed) of a blocklisted prefix can
+        # slip into the clue dictionaries under a different key. get_blocklist() already
+        # includes each entry's normalized form, so an O(1) exact-match check against the
+        # normalized input (cheap set lookup, no extra substring scan) catches any
+        # punctuation style on either side.
+        normalized_prefixes = set()
+        prefix_is_blocklisted = False
         if a.email_prefix is not None and len(a.email_prefix) >= 4:
+            normalized_prefixes = get_normalized_forms(a.email_prefix, a.email_domain, a.location)
+            prefix_is_blocklisted = contains_blocklisted_term(a.email_prefix, blocklist_no_first_names) or \
+                any(np in blocklist_no_first_names_set for np in normalized_prefixes)
+
+        if a.email_prefix is not None and len(a.email_prefix) >= 4 and not prefix_is_blocklisted:
 
             # Store normalized version (without punctuation) for broader matching
-            normalized_prefixes = get_normalized_forms(a.email_prefix, a.email_domain, a.location)
             for normalized_prefix in normalized_prefixes:
                 if normalized_prefix:
                     d_prefix_uid.setdefault(normalized_prefix, set([a.uid]))
@@ -932,6 +1024,16 @@ def do_merging(data, file_path, config_path=None):
         print(d_prefix_uid)
         print(d_name_uid)
 
+    # Computed early (before any matching dict is built) so every matching mechanism
+    # below -- not just the lookup dicts populated so far -- can skip these aliases.
+    first_name_only_excluded_uids = set()
+    if CONFIG.get('EXCLUDE_FIRST_NAME_ONLY_FROM_MERGING', False):
+        for uid, alias in aliases.items():
+            if hasattr(alias, 'is_weird_id') and isinstance(alias.is_weird_id, (tuple, list)):
+                # Index [2] = name_is_weird_id_first_name
+                if len(alias.is_weird_id) > 2 and alias.is_weird_id[2]:
+                    first_name_only_excluded_uids.add(uid)
+
     # Generate abbreviation patterns for names with 3+ parts
     # This must happen BEFORE clue creation so the patterns are available for matching
     for uid, alias in aliases.items():
@@ -983,8 +1085,8 @@ def do_merging(data, file_path, config_path=None):
 
     # If configured, filter out privacy email aliases from all lookups
     # This prevents them from being merged with anything
+    privacy_email_uids = set()
     if CONFIG.get('EXCLUDE_PRIVACY_EMAILS_FROM_MERGING', False):
-        privacy_email_uids = set()
         for uid, alias in aliases.items():
             if hasattr(alias, 'is_weird_id') and isinstance(alias.is_weird_id, (tuple, list)):
                 # Index [6] = name_is_weird_id_privacy_email
@@ -1002,18 +1104,50 @@ def do_merging(data, file_path, config_path=None):
                     if not d[key]:
                         del d[key]
 
+    # If configured, filter out aliases whose name is just a common first name
+    # (e.g. "Josh" alone) from all lookups built so far. This prevents them from
+    # being merged with anything, the same way EXCLUDE_PRIVACY_EMAILS_FROM_MERGING
+    # does. Matching mechanisms built later (e.g. the bare single-word-name email
+    # pattern below) check first_name_only_excluded_uids directly at the source,
+    # since their lookup dicts don't exist yet at this point.
+    if first_name_only_excluded_uids:
+        for d in [d_email_uid, d_prefix_uid, d_comp_prefix_uid, d_login_uid, d_name_uid,
+                  d_domain_uid, d_domain_main_part_uid, d_location_uid]:
+            for key in list(d.keys()):
+                if isinstance(d[key], set):
+                    d[key] = d[key] - first_name_only_excluded_uids
+                    # Remove empty sets
+                    if not d[key]:
+                        del d[key]
+
+    # Combined set of uids that must never be merged with anything, for use by every
+    # matching rule implemented below this point. The dictionary purges above only
+    # cover dictionaries that already exist at this point in the function -- any rule
+    # that builds its own lookup structure directly from `aliases` (rather than reusing
+    # one of the purged dictionaries) must explicitly skip these uids itself, or it will
+    # silently bypass both exclusions.
+    excluded_uids = privacy_email_uids | first_name_only_excluded_uids
+
     clues = {}
 
     if CONFIG.get('EMAIL', True):
         for email, set_uid in d_email_uid.items():
-            if len(set_uid) > THR_MIN and not email in blacklist:
-                for a,b in combinations(sorted(set_uid, key=lambda uid:int(uid)), 2):
-                    clues.setdefault((a, b), [])
-                    clues[(a, b)].append(EMAIL)
+            if len(set_uid) > THR_MIN and not email in blocklist:
+                # Require a non-empty domain before trusting an exact email match as
+                # identity evidence. A malformed/truncated email like "firstname@"
+                # (empty domain) being byte-identical across different people is
+                # evidence of upstream data corruption, not a shared account -- EMAIL
+                # is otherwise the single strongest, blocklist-light rule in the file,
+                # so it needs this guard more than most.
+                domain = email.split('@', 1)[1] if '@' in email else ''
+                if domain:
+                    for a,b in combinations(sorted(set_uid, key=lambda uid:int(uid)), 2):
+                        clues.setdefault((a, b), [])
+                        clues[(a, b)].append(EMAIL)
 
     if CONFIG.get('COMP_EMAIL_PREFIX', True):
         for prefix, set_uid in d_comp_prefix_uid.items():
-            if len(set_uid) > THR_MIN and len(set_uid) < THR_MAX and not (prefix in blacklist or contains_blacklisted_term(prefix, blacklist_no_first_names)):
+            if len(set_uid) > THR_MIN and len(set_uid) < THR_MAX and not (prefix in blocklist or contains_blocklisted_term(prefix, blocklist_no_first_names)):
                 if len(prefix) >= THR_MIN_LENGTH:
                     for a,b in combinations(sorted(set_uid, key=lambda uid:int(uid)), 2):
                         clues.setdefault((a, b), [])
@@ -1021,7 +1155,7 @@ def do_merging(data, file_path, config_path=None):
 
     if CONFIG.get('SIMPLE_EMAIL_PREFIX', True):
         for prefix, set_uid in d_prefix_uid.items():
-            if len(set_uid) > THR_MIN and len(set_uid) < THR_MAX and not (prefix in blacklist or contains_blacklisted_term(prefix, blacklist_no_first_names)):
+            if len(set_uid) > THR_MIN and len(set_uid) < THR_MAX and not (prefix in blocklist or contains_blocklisted_term(prefix, blocklist_no_first_names)):
                 if len(prefix) >= THR_MIN_LENGTH:
                     for a,b in combinations(sorted(set_uid, key=lambda uid:int(uid)), 2):
                         clues.setdefault((a, b), [])
@@ -1029,7 +1163,7 @@ def do_merging(data, file_path, config_path=None):
 
     if CONFIG.get('PREFIX_LOGIN', True):
         for prefix in set(d_prefix_uid.keys()).intersection(set(d_login_uid.keys())):
-            if len(prefix) >= THR_MIN_LENGTH and len(d_prefix_uid[prefix]) < THR_MAX and not (prefix in blacklist or contains_blacklisted_term(prefix, blacklist_no_first_names)):
+            if len(prefix) >= THR_MIN_LENGTH and len(d_prefix_uid[prefix]) < THR_MAX and not (prefix in blocklist or contains_blocklisted_term(prefix, blocklist_no_first_names)):
                 for a,b in product(sorted(d_login_uid[prefix], key=lambda uid:int(uid)), sorted(d_prefix_uid[prefix], key=lambda uid:int(uid))):
                     if a < b:
                         clues.setdefault((a, b), [])
@@ -1038,7 +1172,7 @@ def do_merging(data, file_path, config_path=None):
 
     if CONFIG.get('PREFIX_NAME', True):
         for prefix in set(d_prefix_uid.keys()).intersection(set(d_name_uid.keys())):
-            if len(prefix) >= THR_MIN_LENGTH and len(d_prefix_uid[prefix]) < THR_MAX and len(d_name_uid[prefix]) < THR_MAX and not (prefix in blacklist or contains_blacklisted_term(prefix, blacklist_no_first_names)):
+            if len(prefix) >= THR_MIN_LENGTH and len(d_prefix_uid[prefix]) < THR_MAX and len(d_name_uid[prefix]) < THR_MAX and not (prefix in blocklist or contains_blocklisted_term(prefix, blocklist_no_first_names)):
                 for a,b in product(sorted(d_name_uid[prefix], key=lambda uid:int(uid)), sorted(d_prefix_uid[prefix], key=lambda uid:int(uid))):
                     if a < b:
                         clues.setdefault((a, b), [])
@@ -1050,7 +1184,7 @@ def do_merging(data, file_path, config_path=None):
 
     if CONFIG.get('PREFIX_NAME', True):
         for comp_prefix in set(d_comp_prefix_uid.keys()).intersection(set(d_name_uid.keys())):
-            if len(comp_prefix) >= THR_MIN_LENGTH and len(d_comp_prefix_uid[comp_prefix]) < THR_MAX and len(d_name_uid[comp_prefix]) < THR_MAX and not (comp_prefix in blacklist or contains_blacklisted_term(comp_prefix, blacklist_no_first_names)):
+            if len(comp_prefix) >= THR_MIN_LENGTH and len(d_comp_prefix_uid[comp_prefix]) < THR_MAX and len(d_name_uid[comp_prefix]) < THR_MAX and not (comp_prefix in blocklist or contains_blocklisted_term(comp_prefix, blocklist_no_first_names)):
                 for a,b in product(sorted(d_name_uid[comp_prefix], key=lambda uid:int(uid)), sorted(d_comp_prefix_uid[comp_prefix], key=lambda uid:int(uid))):
                     if a < b:
                         clues.setdefault((a, b), [])
@@ -1061,18 +1195,72 @@ def do_merging(data, file_path, config_path=None):
 
     if CONFIG.get('LOGIN_NAME', True):
         for prefix in set(d_login_uid.keys()).intersection(set(d_name_uid.keys())):
-            if len(d_name_uid[prefix]) < THR_MAX and not prefix in blacklist:
+            if len(d_name_uid[prefix]) < THR_MAX and not prefix in blocklist:
                 for a,b in product(sorted(d_name_uid[prefix], key=lambda uid:int(uid)), sorted(d_login_uid[prefix], key=lambda uid:int(uid))):
                     if a < b:
                         clues.setdefault((a, b), [])
                         if not SIMPLE_EMAIL_PREFIX in clues[(a, b)]:
                             clues[(a, b)].append(LOGIN_NAME)
 
+    # Match names where the first name is a nickname of the other's first name
+    # (e.g., "Jim Smith" <-> "James Smith"). Only considers names that normalize
+    # down to exactly first+last (2 words) -- e.g., "Jim J. Smith" collapses to
+    # "jim smith" via the existing middle-initial stripping and is eligible, but a
+    # name with real (non-initial) middle content stays 3+ words and is intentionally
+    # excluded, so this never silently drops non-trivial middle content.
+    if CONFIG.get('NICKNAME_MATCH', True):
+        nickname_allow_ambiguous = CONFIG.get('NICKNAME_ALLOW_AMBIGUOUS', False)
+        nickname_overrides = parse_nickname_overrides(CONFIG.get('NICKNAME_OVERRIDES', []))
+
+        nickname_canonical_to_uid = {}
+        # (uid, key) pairs where uid reached that bucket via an actual nickname
+        # substitution (canonical_first != first_name), not just the self-inclusion
+        # below. A pair sharing a bucket only through self-inclusion on both sides
+        # has the exact same first name -- that's FULL_NAME's job, not a nickname
+        # match, and double-counting it as a second, "independent" clue would let
+        # identical-name pairs clear the two-clue merge threshold on a single signal.
+        nontrivial_nickname_keys = set()
+        for uid, alias in aliases.items():
+            if uid in excluded_uids:
+                continue
+            if alias.name:
+                name_normalized_forms = get_normalized_forms(alias.name, alias.email_domain, alias.location)
+                for name_normalized in name_normalized_forms:
+                    if name_normalized:
+                        parts = name_normalized.split(' ')
+                        if len(parts) == 2:
+                            first_name, last_name = parts
+                            if first_name and last_name and len(last_name) >= MIN_NAME_PART_LENGTH:
+                                # Self-inclusion is required so that a canonical name (e.g.
+                                # "James") is indexed under its own key and can be found by
+                                # a genuine nickname (e.g. "Jim") -- but it also means two
+                                # aliases with the identical first name share this bucket
+                                # trivially, which nontrivial_nickname_keys guards against below.
+                                candidates = get_nickname_canonicals(first_name, nickname_allow_ambiguous, nickname_overrides) | {first_name}
+                                for canonical_first in candidates:
+                                    key = (canonical_first, last_name)
+                                    nickname_canonical_to_uid.setdefault(key, set()).add(uid)
+                                    if canonical_first != first_name:
+                                        nontrivial_nickname_keys.add((uid, key))
+
+        for key, set_uid in nickname_canonical_to_uid.items():
+            if len(set_uid) > THR_MIN and len(set_uid) < THR_MAX:
+                for a, b in combinations(sorted(set_uid, key=lambda uid: int(uid)), 2):
+                    if (a, key) not in nontrivial_nickname_keys and (b, key) not in nontrivial_nickname_keys:
+                        continue
+                    clues.setdefault((a, b), [])
+                    clues[(a, b)].append(NICKNAME_MATCH)
+
     if CONFIG.get('FULL_NAME', True):
         for name, set_uid in d_name_uid.items():
             if len(set_uid) > THR_MIN and len(set_uid) < THR_MAX and len(name) >= THR_MIN_LENGTH:
-                name_parts = name.split(' ')
-                if len(name_parts) > 1 or name not in blacklist:
+                # Blocklist check applies to the whole normalized name, single-word or
+                # multi-word alike -- exact match only (list membership, not substring),
+                # so e.g. "your name" is excluded but "your name is dumb" is not.
+                # Previously this was skipped entirely for any multi-word name, so known
+                # multi-word placeholders (e.g. "your name", the literal example text
+                # from Git's own setup instructions) silently bypassed the blocklist.
+                if name not in blocklist:
                     for a,b in combinations(sorted(set_uid, key=lambda uid:int(uid)), 2):
                         clues.setdefault((a, b), [])
                         clues[(a, b)].append(FULL_NAME)
@@ -1083,14 +1271,14 @@ def do_merging(data, file_path, config_path=None):
 
     if CONFIG.get('DOMAIN', True):
         for domain, set_uid in d_domain_uid.items():
-            if len(set_uid) > THR_MIN and len(set_uid) < THR_MAX and not domain in blacklist:
+            if len(set_uid) > THR_MIN and len(set_uid) < THR_MAX and not domain in blocklist:
                 for a,b in combinations(sorted(set_uid, key=lambda uid:int(uid)), 2):
                     clues.setdefault((a, b), [])
                     clues[(a, b)].append(DOMAIN)
 
     if CONFIG.get('DOMAIN_MAIN_PART', True):
         for domain_main_part, set_uid in d_domain_main_part_uid.items():
-            if len(set_uid) > THR_MIN and len(set_uid) < THR_MAX and not domain_main_part in blacklist:
+            if len(set_uid) > THR_MIN and len(set_uid) < THR_MAX and not domain_main_part in blocklist:
                 for a,b in combinations(sorted(set_uid, key=lambda uid:int(uid)), 2):
                     a_normalized_prefix = prefix_normalized_cache.get(a, '')
                     b_normalized_prefix = prefix_normalized_cache.get(b, '')
@@ -1113,12 +1301,15 @@ def do_merging(data, file_path, config_path=None):
         name_parts_to_uid = {}  # Track all aliases with 2+ part names
 
         for uid, alias in aliases.items():
+            if uid in excluded_uids:
+                continue
             if alias.email_domain and alias.name:
                 # Extract domain main part (excluding TLD)
                 domain_parts = alias.email_domain.split('.')
                 if len(domain_parts) >= 2:
                     domain_main = domain_parts[-2].lower()  # Get second-to-last part (main domain)
-                    domain_to_uid.setdefault(domain_main, set()).add(uid)
+                    if len(domain_main) >= THR_MIN_LENGTH:
+                        domain_to_uid.setdefault(domain_main, set()).add(uid)
 
                     # Normalize the name for comparison (use dual normalization for German umlauts)
                     normalized_names = get_normalized_forms(alias.name, alias.email_domain, alias.location)
@@ -1126,7 +1317,7 @@ def do_merging(data, file_path, config_path=None):
                     # Remove spaces from normalized names for domain comparison
                     for normalized_name in normalized_names:
                         normalized_name_no_spaces = normalized_name.replace(' ', '') if normalized_name else None
-                        if normalized_name_no_spaces:
+                        if normalized_name_no_spaces and len(normalized_name_no_spaces) >= THR_MIN_LENGTH:
                             name_to_uid.setdefault(normalized_name_no_spaces, set()).add(uid)
 
                         # Store first and last names separately for targeted domain/prefix matching
@@ -1152,7 +1343,7 @@ def do_merging(data, file_path, config_path=None):
 
         # Cross-compare: find matches where one alias's normalized name matches another's domain main part
         for normalized_name_no_spaces, name_uids in name_to_uid.items():
-            if normalized_name_no_spaces in domain_to_uid and not normalized_name_no_spaces in blacklist:
+            if normalized_name_no_spaces in domain_to_uid and not normalized_name_no_spaces in blocklist:
                 domain_uids = domain_to_uid[normalized_name_no_spaces]
                 # Create clues between aliases with matching name/domain
                 if len(name_uids) + len(domain_uids) > THR_MIN and len(name_uids) + len(domain_uids) < THR_MAX:
@@ -1187,6 +1378,8 @@ def do_merging(data, file_path, config_path=None):
 
         # Additional matching: email pattern "firstname@lastname.domain" with name "Firstname Lastname"
         for uid, alias in aliases.items():
+            if uid in excluded_uids:
+                continue
             if alias.email_prefix and alias.email_domain:
                 domain_parts = alias.email_domain.split('.')
                 if len(domain_parts) >= 2:
@@ -1215,6 +1408,8 @@ def do_merging(data, file_path, config_path=None):
         name_base_to_uid = {}  # normalized_name_without_suffix -> set of uids
 
         for uid, alias in aliases.items():
+            if uid in excluded_uids:
+                continue
             if alias.name and len(alias.name.split()) >= 2:  # At least two components
                 name_lower = alias.name.lower().strip()
 
@@ -1231,7 +1426,7 @@ def do_merging(data, file_path, config_path=None):
 
         # Find matches where base names are identical
         for base_name, uids in name_base_to_uid.items():
-            if len(uids) > THR_MIN and len(uids) < THR_MAX and base_name not in blacklist:
+            if len(uids) > THR_MIN and len(uids) < THR_MAX and base_name not in blocklist:
                 for a, b in combinations(sorted(uids), 2):
                     alias_a = aliases[a]
                     alias_b = aliases[b]
@@ -1254,6 +1449,8 @@ def do_merging(data, file_path, config_path=None):
         name_to_uid_github = {}      # normalized_name -> set of uids
 
         for uid, alias in aliases.items():
+            if uid in excluded_uids:
+                continue
             # Check for GitHub noreply email pattern
             if (alias.email and 'users.noreply.github.com' in alias.email.lower() and
                 alias.email_prefix and '+' in alias.email_prefix):
@@ -1280,7 +1477,7 @@ def do_merging(data, file_path, config_path=None):
             if github_username in name_to_uid_github:
                 name_uids = name_to_uid_github[github_username]
                 # Create clues between aliases with matching GitHub username and name
-                if len(github_uids) + len(name_uids) > THR_MIN and len(github_uids) + len(name_uids) < THR_MAX and github_username not in blacklist:
+                if len(github_uids) + len(name_uids) > THR_MIN and len(github_uids) + len(name_uids) < THR_MAX and github_username not in blocklist:
                     for github_uid in github_uids:
                         for name_uid in name_uids:
                             if github_uid != name_uid:  # Don't match alias with itself
@@ -1321,6 +1518,8 @@ def do_merging(data, file_path, config_path=None):
     full_middle_to_uid = {}
 
     for uid, alias in aliases.items():
+        if uid in excluded_uids:
+            continue
         if alias.name:
             name_parts = alias.name.strip().split()
 
@@ -1468,7 +1667,7 @@ def do_merging(data, file_path, config_path=None):
                 # "Michael Hilton" and "Michael Huber" (where "michael" is the common first name)
                 # But allow matches like "doej" with "John Doe" (where "doe" is not common)
                 skip_all = False
-                if last_name and last_name.lower() in [n.lower() for n in blacklist_first_names]:
+                if last_name and last_name.lower() in [n.lower() for n in blocklist_first_names]:
                     skip_all = True
 
                 if not skip_all and len(abbrev_uids) + len(full_uids) > THR_MIN and len(abbrev_uids) + len(full_uids) < THR_MAX:
@@ -1490,7 +1689,7 @@ def do_merging(data, file_path, config_path=None):
                 # "Michael Hilton" and "Michael Huber" (where "michael" is the common first name)
                 # But allow matches like "Doe J" with "Doe John" (where "doe" is not common)
                 skip_all = False
-                if first_name and first_name.lower() in [n.lower() for n in blacklist_first_names]:
+                if first_name and first_name.lower() in [n.lower() for n in blocklist_first_names]:
                     skip_all = True
 
                 if not skip_all and len(abbrev_uids) + len(full_uids) > THR_MIN and len(abbrev_uids) + len(full_uids) < THR_MAX:
@@ -1529,7 +1728,20 @@ def do_merging(data, file_path, config_path=None):
     # Format: (first_name, middle_initial, last_name) -> set of uids (for email prefix matching like "jmsmith")
     email_prefix_abbrev_middle_to_uid = {}
 
+    # Format: "first last" / "firstlast" -> set of uids, built from a bare single-word name
+    # (e.g., "John") plus a last name inferred from that same alias's email prefix (e.g.
+    # "j.smith" -> "smith"). Unlike the (first_initial, last_name) keys above, this keeps
+    # the full known first name, so it can be checked directly against d_name_uid (other
+    # aliases' full names) instead of only matching on a single shared initial.
+    bare_name_candidate_to_uid = {}
+    # Format: same candidate string -> the inferred last name, so the match step can check
+    # it against blocklist_first_names without re-parsing it back out of the candidate string
+    # (which would silently skip the check for the concatenated, no-space candidate form).
+    bare_name_candidate_to_last_name = {}
+
     for uid, alias in aliases.items():
+        if uid in excluded_uids:
+            continue
         # Check email prefix for abbreviation patterns like "jsmith" or "johns"
         if alias.email_prefix and alias.name:
             name_parts = alias.name.strip().split()
@@ -1602,6 +1814,32 @@ def do_merging(data, file_path, config_path=None):
                                                             key = (first_name[0], middle_name[0], last_name)
                                                             email_prefix_abbrev_middle_to_uid.setdefault(key, set()).add(uid)
 
+            elif len(name_parts) == 1 and uid not in first_name_only_excluded_uids:
+                # Bare single-word name (e.g., "John") with an email prefix that looks like
+                # first_initial + last_name ("jsmith") or last_name + first_initial ("smithj").
+                # Reconstruct a candidate full name using the known bare first name (not just
+                # its initial) and the inferred last name, for matching against d_name_uid.
+                bare_name_forms = get_normalized_forms(alias.name, alias.email_domain, alias.location)
+                email_prefix_norm_forms = get_normalized_forms(alias.email_prefix, alias.email_domain, alias.location)
+
+                for bare_name in bare_name_forms:
+                    if bare_name and len(bare_name) >= MIN_NAME_PART_LENGTH:
+                        first_initial = bare_name[0]
+                        for email_prefix_norm in email_prefix_norm_forms:
+                            if email_prefix_norm and len(email_prefix_norm) >= THR_MIN_LENGTH and len(email_prefix_norm) > 1:
+                                candidate_last = None
+                                # Pattern: first_initial + last_name (e.g., "jsmith")
+                                if email_prefix_norm[0] == first_initial:
+                                    candidate_last = email_prefix_norm[1:]
+                                # Pattern: last_name + first_initial (e.g., "smithj")
+                                elif email_prefix_norm[-1] == first_initial:
+                                    candidate_last = email_prefix_norm[:-1]
+
+                                if candidate_last and len(candidate_last) >= MIN_NAME_PART_LENGTH:
+                                    for candidate in (f"{bare_name} {candidate_last}", f"{bare_name}{candidate_last}"):
+                                        bare_name_candidate_to_uid.setdefault(candidate, set()).add(uid)
+                                        bare_name_candidate_to_last_name[candidate] = candidate_last
+
     # Match email prefix abbreviations with full names
     # Match "jsmith" and "smithj" patterns with full first names
     if CONFIG.get('ABBREV_FIRST_NAME', True):
@@ -1614,7 +1852,7 @@ def do_merging(data, file_path, config_path=None):
                 # "Michael Hilton" and "Michael Huber" (where "michael" is the common first name)
                 # But allow matches like "doej" with "John Doe" (where "doe" is not common)
                 skip_all = False
-                if last_name and last_name.lower() in [n.lower() for n in blacklist_first_names]:
+                if last_name and last_name.lower() in [n.lower() for n in blocklist_first_names]:
                     skip_all = True
 
                 if not skip_all and len(email_prefix_uids) + len(full_uids) > THR_MIN and len(email_prefix_uids) + len(full_uids) < THR_MAX:
@@ -1622,6 +1860,25 @@ def do_merging(data, file_path, config_path=None):
                         for full_uid in full_uids:
                             if email_uid != full_uid:
                                 a, b = sorted([email_uid, full_uid])
+                                clues.setdefault((a, b), [])
+                                clues[(a, b)].append(ABBREV_FIRST_NAME)
+
+    # Match a bare single-word name + email-inferred last name (e.g., "John" with
+    # "j.smith@...") against other aliases' full names in d_name_uid
+    if CONFIG.get('ABBREV_FIRST_NAME', True):
+        for candidate, candidate_uids in bare_name_candidate_to_uid.items():
+            if candidate in d_name_uid:
+                full_uids = d_name_uid[candidate] - candidate_uids
+                # Skip if the inferred last name is itself a common first name, same
+                # false-positive concern as the (first_initial, last_name) matching above
+                candidate_last = bare_name_candidate_to_last_name.get(candidate)
+                skip_all = candidate_last is not None and candidate_last.lower() in [n.lower() for n in blocklist_first_names]
+
+                if full_uids and not skip_all and len(candidate_uids) + len(full_uids) > THR_MIN and len(candidate_uids) + len(full_uids) < THR_MAX:
+                    for candidate_uid in candidate_uids:
+                        for full_uid in full_uids:
+                            if candidate_uid != full_uid:
+                                a, b = sorted([candidate_uid, full_uid])
                                 clues.setdefault((a, b), [])
                                 clues[(a, b)].append(ABBREV_FIRST_NAME)
 
@@ -1636,7 +1893,7 @@ def do_merging(data, file_path, config_path=None):
                 # "Michael Hilton" and "Michael Huber" (where "michael" is the common first name)
                 # But allow matches like "doej" with "Doe John" (where "doe" is not common)
                 skip_all = False
-                if first_name and first_name.lower() in [n.lower() for n in blacklist_first_names]:
+                if first_name and first_name.lower() in [n.lower() for n in blocklist_first_names]:
                     skip_all = True
 
                 if not skip_all and len(email_prefix_uids) + len(full_uids) > THR_MIN and len(email_prefix_uids) + len(full_uids) < THR_MAX:
@@ -1688,9 +1945,11 @@ def do_merging(data, file_path, config_path=None):
             parts = norm.split()
             return (len(parts) == 2
                     and len(parts[0]) >= 2 and len(parts[1]) >= 2
-                    and norm not in blacklist)
+                    and norm not in blocklist)
 
         for uid, alias in aliases.items():
+            if uid in excluded_uids:
+                continue
             if not alias.name:
                 continue
             raw_name = alias.name.strip()
@@ -1709,7 +1968,7 @@ def do_merging(data, file_path, config_path=None):
                 comma_idx = raw_name.index(',')
                 last_word = raw_name[:comma_idx].strip()
                 first_and_rest = raw_name[comma_idx + 1:].strip()
-                # Guard: last part must be a single token (e.g. not "van der Berg, Jan")
+                # Guard: last part must be a single token (e.g., not "van der Berg, Jan")
                 if last_word and ' ' not in last_word and first_and_rest:
                     rearranged = first_and_rest + ' ' + last_word
                     for norm in get_normalized_forms(rearranged, alias.email_domain, alias.location):
@@ -1765,7 +2024,7 @@ def do_merging(data, file_path, config_path=None):
                 for a,b in combinations(sorted(set_uid, key=lambda uid:int(uid)), 2):
                     na = d_uid_name[a]
                     nb = d_uid_name[b]
-                    if na is not None and nb is not None and len(na.split()) > 1 and na==nb and na not in blacklist:
+                    if na is not None and nb is not None and len(na.split()) > 1 and na==nb and na not in blocklist:
                         if len(d_name_uid.get(na, set([]))) < THR_MAX:
                             clues.setdefault((a, b), [])
                             clues[(a, b)].append(LOCATION)
@@ -1892,6 +2151,8 @@ def do_merging(data, file_path, config_path=None):
             merge(a,b,ABBREV_LAST_NAME)
         elif ABBREV_MIDDLE_NAME in list_clues:
             merge(a,b,ABBREV_MIDDLE_NAME)
+        elif NICKNAME_MATCH in list_clues:
+            merge(a,b,NICKNAME_MATCH)
 
 
     if DEBUG:
@@ -1945,6 +2206,8 @@ def do_merging(data, file_path, config_path=None):
         elif cl.get(ABBREV_LAST_NAME,0) >= 1:
             is_valid = True
         elif cl.get(ABBREV_MIDDLE_NAME,0) >= 1:
+            is_valid = True
+        elif cl.get(NICKNAME_MATCH,0) >= 1:
             is_valid = True
         # If all members have the same email
         elif len(Counter([m.email for m in members]).keys()) == 1:
@@ -2033,7 +2296,7 @@ def do_merging(data, file_path, config_path=None):
                     rep = sorted(with_location, key=lambda m:int(m.uid))[0]
                 else:
                     # Pick the one whose name consists of two parts
-                    # (e.g. "John Smith")
+                    # (e.g., "John Smith")
                     # get all names that have two parts and where both the first and the second parts are larger than 1 character
                     # Filter out names with ill-encoded characters
                     two_parts = [m for m in real if len(m.name.split(' ')) == 2 and len(m.name.split(' ')[0]) > 1 and len(m.name.split(' ')[1]) > 1 and not has_ill_encoded_characters(m.name)]
@@ -2098,12 +2361,14 @@ def do_merging(data, file_path, config_path=None):
 
 
 
-def is_alias_weird_id(alias):
+def is_alias_weird_id(alias, blocklist_with_first_names=None, blocklist_without_first_names=None):
     """
     Check if the given user ID is a weird ID based on specific criteria.
 
     Args:
         alias (Alias): An instance of the Alias class containing user information.
+        blocklist_with_first_names (list): get_blocklist(True) result. Computed locally if omitted.
+        blocklist_without_first_names (list): get_blocklist(False) result. Computed locally if omitted.
     Returns:
         a touple of bools:
             - name_is_weird_id_git_provider: True if the alias name is associated with a known git hosting provider.
@@ -2120,9 +2385,14 @@ def is_alias_weird_id(alias):
             - email_is_weird_id_privacy_email: True if the alias email is a privacy-preserving email domain.
     """
 
+    if blocklist_with_first_names is None:
+        blocklist_with_first_names = get_blocklist(include_first_names=True)
+    if blocklist_without_first_names is None:
+        blocklist_without_first_names = get_blocklist(include_first_names=False)
+
     contains_github = (alias.email and 'github' in alias.email.lower()) or (alias.email_domain and 'github' in alias.email_domain.lower())
-    name_is_first_name = alias.name.lower() in get_blacklist(include_first_names=True)
-    name_is_not_a_single_human = alias.name.lower() in get_blacklist(include_first_names=False)
+    name_is_first_name = alias.name.lower() in blocklist_with_first_names
+    name_is_not_a_single_human = alias.name.lower() in blocklist_without_first_names
     name_is_missing = alias.name is None or len(alias.name) == 0
 
 
@@ -2146,87 +2416,89 @@ def is_alias_weird_id(alias):
     email_is_weird_id_privacy_email = False
 
 
-    if normalize_for_comparison(alias.name.lower()) in blacklist_git_hosting:
+    normalized_name = normalize_for_comparison(alias.name.lower())
+
+    if normalized_name in blocklist_git_hosting:
         if DEBUG:
             print(f"Name is git hosting provider: {alias.name}, {alias.email}, {alias.email_domain}, {alias.email_prefix}")
         name_is_weird_id_git_provider = True
 
-    if normalize_for_comparison(alias.name.lower()) in blacklist_email_providers:
+    if normalized_name in blocklist_email_providers:
         if DEBUG:
             print(f"Name is email provider: {alias.name}, {alias.email}, {alias.email_domain}, {alias.email_prefix}")
         name_is_weird_id_email_provider = True
 
-    if normalize_for_comparison(alias.name.lower()) in blacklist_first_names:
+    if normalized_name in blocklist_first_names_lower:
         if DEBUG:
             print(f"Name is first name: {alias.name}, {alias.email}, {alias.email_domain}, {alias.email_prefix}")
         name_is_weird_id_first_name = True
 
-    if normalize_for_comparison(alias.name.lower()) in blacklist_generic_terms:
+    if normalized_name in blocklist_generic_terms:
         if DEBUG:
             print(f"Name is generic term: {alias.name}, {alias.email}, {alias.email_domain}, {alias.email_prefix}")
         name_is_weird_id_generic = True
     elif len(alias.name.split(' ')) > 1 or len(alias.name.split('_')) > 1 or len(alias.name.split('.')) > 1 or len(alias.name.split('+')) > 1:
-        if any(normalize_for_comparison(part.lower()) in blacklist_generic_terms for part in alias.name.split(' ')) or any(normalize_for_comparison(part.lower()) in blacklist_generic_terms for part in alias.name.split('_')) \
-        or any(normalize_for_comparison(part.lower()) in blacklist_generic_terms for part in alias.name.split('.')) or any(normalize_for_comparison(part.lower()) in blacklist_generic_terms for part in alias.name.split('+')):
+        if any(normalize_for_comparison(part.lower()) in blocklist_generic_terms for part in alias.name.split(' ')) or any(normalize_for_comparison(part.lower()) in blocklist_generic_terms for part in alias.name.split('_')) \
+        or any(normalize_for_comparison(part.lower()) in blocklist_generic_terms for part in alias.name.split('.')) or any(normalize_for_comparison(part.lower()) in blocklist_generic_terms for part in alias.name.split('+')):
             if DEBUG:
                 print(f"Name is generic term: {alias.name}, {alias.email}, {alias.email_domain}, {alias.email_prefix}")
             name_is_weird_id_generic = True
 
-    if normalize_for_comparison(alias.name.lower()) in blacklist_no_names:
+    if normalized_name in blocklist_no_names:
         if DEBUG:
             print(f"Name is missing: {alias.name}, {alias.email}, {alias.email_domain}, {alias.email_prefix}")
         name_is_weird_id_name_is_missing = True
     elif len(alias.name.split(' ')) == 1 and len(alias.name.split('_')) == 1 and len(alias.name.split('.')) == 1 and len(alias.name.split('+')) == 1:
-        if any(normalize_for_comparison(part.lower()) in blacklist_no_names for part in alias.name.split(' ')) or any(normalize_for_comparison(part.lower()) in blacklist_no_names for part in alias.name.split('_')) \
-        or any(normalize_for_comparison(part.lower()) in blacklist_no_names for part in alias.name.split('.')) or any(normalize_for_comparison(part.lower()) in blacklist_no_names for part in alias.name.split('+')):
+        if any(normalize_for_comparison(part.lower()) in blocklist_no_names for part in alias.name.split(' ')) or any(normalize_for_comparison(part.lower()) in blocklist_no_names for part in alias.name.split('_')) \
+        or any(normalize_for_comparison(part.lower()) in blocklist_no_names for part in alias.name.split('.')) or any(normalize_for_comparison(part.lower()) in blocklist_no_names for part in alias.name.split('+')):
             if DEBUG:
                 print(f"Name is missing: {alias.name}, {alias.email}, {alias.email_domain}, {alias.email_prefix}")
             name_is_weird_id_name_is_missing = True
 
 
-    if normalize_for_comparison(alias.name.lower()) in blacklist_machine_names:
+    if normalized_name in blocklist_machine_names:
         if DEBUG:
             print(f"Name is machine name: {alias.name}, {alias.email}, {alias.email_domain}, {alias.email_prefix}")
         name_is_weird_id_name_is_machine_name = True
 
-    if normalize_for_comparison(alias.name.lower()) in blacklist_privacy_emails:
+    if normalized_name in blocklist_privacy_emails:
         if DEBUG:
             print(f"Name is privacy email: {alias.name}, {alias.email}, {alias.email_domain}, {alias.email_prefix}")
         name_is_weird_id_privacy_email = True
 
 
-    if (alias.email and alias.email.lower() in blacklist_git_hosting) or (alias.email_domain and alias.email_domain.lower() in blacklist_git_hosting) or (alias.email_prefix and alias.email_prefix.lower() in blacklist_git_hosting):
+    if (alias.email and alias.email.lower() in blocklist_git_hosting) or (alias.email_domain and alias.email_domain.lower() in blocklist_git_hosting) or (alias.email_prefix and alias.email_prefix.lower() in blocklist_git_hosting):
         if DEBUG:
             print(f"Email is git hosting provider: {alias.name}, {alias.email}, {alias.email_domain}, {alias.email_prefix}")
         email_is_weird_id_git_provider = True
 
 
-    if (alias.email and alias.email.lower() in blacklist_generic_terms) or (alias.email_domain and alias.email_domain.lower() in blacklist_generic_terms) or (alias.email_prefix and alias.email_prefix.lower() in blacklist_generic_terms):
+    if (alias.email and alias.email.lower() in blocklist_generic_terms) or (alias.email_domain and alias.email_domain.lower() in blocklist_generic_terms) or (alias.email_prefix and alias.email_prefix.lower() in blocklist_generic_terms):
         if DEBUG:
             print(f"Email is generic term: {alias.name}, {alias.email}, {alias.email_domain}, {alias.email_prefix}")
         email_is_weird_id_generic = True
     elif alias.email_prefix and (len(alias.email_prefix.split('.')) > 1 or len(alias.email_prefix.split('_')) > 1):
-        if alias.email_prefix and (any(part.lower() in blacklist_generic_terms for part in alias.email_prefix.split('.')) or any(part.lower() in blacklist_generic_terms for part in alias.email_prefix.split('_'))):
+        if alias.email_prefix and (any(part.lower() in blocklist_generic_terms for part in alias.email_prefix.split('.')) or any(part.lower() in blocklist_generic_terms for part in alias.email_prefix.split('_'))):
             if DEBUG:
                 print(f"Email is generic term: {alias.name}, {alias.email}, {alias.email_domain}, {alias.email_prefix}")
             email_is_weird_id_generic = True
 
-    if (alias.email and alias.email.lower() in blacklist_machine_names) or (alias.email_domain and alias.email_domain.lower() in blacklist_machine_names) or (alias.email_prefix and alias.email_prefix.lower() in blacklist_machine_names):
+    if (alias.email and alias.email.lower() in blocklist_machine_names) or (alias.email_domain and alias.email_domain.lower() in blocklist_machine_names) or (alias.email_prefix and alias.email_prefix.lower() in blocklist_machine_names):
         if DEBUG:
             print(f"Email is machine name: {alias.name}, {alias.email}, {alias.email_domain}, {alias.email_prefix}")
         email_is_weird_id_email_is_machine_name = True
 
-    if (alias.email and alias.email.lower() in blacklist_privacy_emails) or (alias.email_domain and alias.email_domain.lower() in blacklist_privacy_emails) or (alias.email_prefix and alias.email_prefix.lower() in blacklist_privacy_emails):
+    if (alias.email and alias.email.lower() in blocklist_privacy_emails) or (alias.email_domain and alias.email_domain.lower() in blocklist_privacy_emails) or (alias.email_prefix and alias.email_prefix.lower() in blocklist_privacy_emails):
         if DEBUG:
             print(f"Email is privacy email: {alias.name}, {alias.email}, {alias.email_domain}, {alias.email_prefix}")
         email_is_weird_id_privacy_email = True
 
-    if (alias.email and alias.email.lower() in blacklist_no_names) or (alias.email_domain and alias.email_domain.lower() in blacklist_no_names) or (alias.email_prefix and alias.email_prefix.lower() in blacklist_no_names):
+    if (alias.email and alias.email.lower() in blocklist_no_names) or (alias.email_domain and alias.email_domain.lower() in blocklist_no_names) or (alias.email_prefix and alias.email_prefix.lower() in blocklist_no_names):
         if DEBUG:
             print(f"Email is missing: {alias.name}, {alias.email}, {alias.email_domain}, {alias.email_prefix}")
         email_is_weird_id_email_is_missing = True
     elif alias.email_prefix and len(alias.email_prefix.split(' ')) == 1 and len(alias.email_prefix.split('_')) == 1:
-        if alias.email_prefix and (any(part.lower() in blacklist_no_names for part in alias.email_prefix.split(' ')) or any(part.lower() in blacklist_no_names for part in alias.email_prefix.split('_'))):
+        if alias.email_prefix and (any(part.lower() in blocklist_no_names for part in alias.email_prefix.split(' ')) or any(part.lower() in blocklist_no_names for part in alias.email_prefix.split('_'))):
             if DEBUG:
                 print(f"Email is missing: {alias.name}, {alias.email}, {alias.email_domain}, {alias.email_prefix}")
             email_is_weird_id_email_is_missing = True

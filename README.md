@@ -105,7 +105,7 @@ The tool generates a CSV file `merged_authors_<project>.csv` containing:
 
 ### Configuration
 
-Configure normalization steps, matching rules, thresholds, and blacklist by editing the configuration file `merge_config.txt`. Configuration options include:
+Configure normalization steps, matching rules, thresholds, and blocklist by editing the configuration file `merge_config.txt`. Configuration options include:
 
 **Matching Rules:**
 
@@ -116,6 +116,7 @@ Configure normalization steps, matching rules, thresholds, and blacklist by edit
 - `COMMA_SUFFIX_MATCH` - Match names with comma suffix variations
 - `PREFIX_NAME`, `LOGIN_NAME`, `PREFIX_LOGIN` - Match email prefix to name, username, or each other
 - `ABBREV_FIRST_NAME`, `ABBREV_LAST_NAME`, `ABBREV_MIDDLE_NAME` - Handle name abbreviations
+- `NICKNAME_MATCH` - Match nicknames with full first names (e.g., "Jim Smith" <-> "James Smith"); `NICKNAME_ALLOW_AMBIGUOUS` additionally trusts nicknames that could resolve to multiple full names (e.g., "Bob" could be Robert, Bert, or Bobby), which raises the false-positive risk; `NICKNAME_OVERRIDES` lets you supply manually trusted `nickname:canonical` pairs (comma-separated, e.g., `bob:robert, liz:elizabeth`) that are always applied regardless of `NICKNAME_ALLOW_AMBIGUOUS`
 - `GITHUB_USERNAME_MATCH` - Match GitHub usernames (ignores privacy if enabled)
 
 **Thresholds:**
@@ -132,18 +133,23 @@ Configure normalization steps, matching rules, thresholds, and blacklist by edit
 - `REMOVE_TITLES`, `REMOVE_PUNCTUATION` - Clean formatting
 - `REMOVE_MIDDLE_NAMES` - Remove single-character or common first name middle names
 
-**Blacklists:**
+**Blocklists:**
 
-- `BLACKLIST_GIT_HOSTING`, `BLACKLIST_EMAIL_PROVIDERS` - Filter git hosting platforms and email providers
-- `BLACKLIST_GENERIC_TERMS` - Filter generic administrative and system terms
-- `BLACKLIST_NO_NAMES` - Filter terms indicating no real name
-- `BLACKLIST_MACHINE_NAMES` - Filter machine/hostname patterns
-- `BLACKLIST_PRIVACY_EMAILS` - Define privacy-preserving email domains that are only excluded from merging in privacy mode (see below how to enable privacy mode)
-- `BLACKLIST_INCLUDE_FIRST_NAMES` - Control whether common first names are included in the blacklist for name-based checks
+- `BLOCKLIST_GIT_HOSTING`, `BLOCKLIST_EMAIL_PROVIDERS` - Filter git hosting platforms and email providers
+- `BLOCKLIST_GENERIC_TERMS` - Filter generic administrative and system terms
+- `BLOCKLIST_NO_NAMES` - Filter terms indicating no real name
+- `BLOCKLIST_MACHINE_NAMES` - Filter machine/hostname patterns
+- `BLOCKLIST_PRIVACY_EMAILS` - Define privacy-preserving email domains that are only excluded from merging in privacy mode (see below how to enable privacy mode)
+- `BLOCKLIST_UNRESOLVABLE_PLACEHOLDERS` - Filter synthetic placeholders that some upstream extraction tools inject when an author's email could not be parsed/resolved (e.g., `could.not.resolve`); punctuation variants (`could_not_resolve`, `couldnotresolve`, ...) are matched automatically via normalization
+- `BLOCKLIST_INCLUDE_FIRST_NAMES` - Control whether common first names are included in the blocklist for name-based checks
 
 **Privacy mode:**
 
 `EXCLUDE_PRIVACY_EMAILS_FROM_MERGING` - Decide whether to exclude privacy-preserving emails or not (notice that also matching rule `GITHUB_USERNAME_MATCH` needs to be disabled in addition to achieve privacy mode).
+
+**First-name-only handling:**
+
+`EXCLUDE_FIRST_NAME_ONLY_FROM_MERGING` - If true, aliases whose name is just a common first name (e.g., "Josh" alone) won't be merged with anything, independent of whether their email address contains further information.
 
 See `merge_config.txt` for the complete list of options and their descriptions.
 
@@ -153,7 +159,7 @@ For other needs, configure all the configuration options in the configuration fi
 ### Acknowledgement
 
 To prevent merging identities by names that only consist of common first names, GitAuthority uses a dataset of common first names from the Wiktionary Names Appendix (which contains more than 72 980 first names from different languages). To that aim, the files `Female_given_names.txt` and `Male_given_names.txt` have been extracted from [https://github.com/solvenium/names-dataset/](https://github.com/solvenium/names-dataset/) .
-If you would like to prevent other first names being merged than those provided by these datasets, edit the corresponding .txt files manually. If you would like to merge aliases that consist only of common first names, you can configure this in the configuration file by adjusting the value for configuration option `BLACKLIST_INCLUDE_FIRST_NAMES`.
+If you would like to prevent other first names being merged than those provided by these datasets, edit the corresponding .txt files manually. If you would like to merge aliases that consist only of common first names, you can configure this in the configuration file by adjusting the value for configuration option `BLOCKLIST_INCLUDE_FIRST_NAMES`.
 
 ---
 

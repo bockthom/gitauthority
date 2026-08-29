@@ -22,6 +22,9 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')
 
 import gambit
 
+# Percentiles to report for right-skewed author-count distributions (in addition to mean/median/std/max)
+AUTHOR_COUNT_PERCENTILES = [10, 25, 50, 75, 90, 95, 99, 99.5, 99.9, 99.99]
+
 # Dataset configurations
 DATASET_CONFIGS = {
     'GitHub_data': {
@@ -82,11 +85,13 @@ def group_by_identifier(df, config, max_entries=None):
         'org_removed_median_authors': 0.0,
         'org_removed_std_authors': 0.0,
         'org_removed_max_authors': 0,
+        'org_removed_percentiles': {},
         'max_removed_count': 0,
         'remaining_avg_authors': 0.0,
         'remaining_median_authors': 0.0,
         'remaining_std_authors': 0.0,
-        'remaining_max_authors': 0
+        'remaining_max_authors': 0,
+        'remaining_percentiles': {}
     }
 
     # First, group ALL data (including org != filter_value) to get statistics
@@ -123,6 +128,9 @@ def group_by_identifier(df, config, max_entries=None):
             stats['org_removed_median_authors'] = np.median(author_counts)
             stats['org_removed_std_authors'] = np.std(author_counts)
             stats['org_removed_max_authors'] = max(author_counts)
+            stats['org_removed_percentiles'] = {
+                p: np.percentile(author_counts, p) for p in AUTHOR_COUNT_PERCENTILES
+            }
 
     # Apply filter if specified
     grouped = defaultdict(list)
@@ -153,6 +161,9 @@ def group_by_identifier(df, config, max_entries=None):
         stats['remaining_median_authors'] = np.median(author_counts)
         stats['remaining_std_authors'] = np.std(author_counts)
         stats['remaining_max_authors'] = max(author_counts)
+        stats['remaining_percentiles'] = {
+            p: np.percentile(author_counts, p) for p in AUTHOR_COUNT_PERCENTILES
+        }
 
     # Record count after org filtering, before max threshold filtering
     stats['after_org_filter_count'] = len(grouped)
@@ -620,11 +631,19 @@ def evaluate_identifiers(grouped_data, output_csv, config, limit=None, num_worke
             print(f"Median authors per removed org identity: {filter_stats['org_removed_median_authors']:.2f}")
             print(f"Std dev authors per removed org identity: {filter_stats['org_removed_std_authors']:.2f}")
             print(f"Maximum authors per removed org identity: {filter_stats['org_removed_max_authors']}")
+            if filter_stats['org_removed_percentiles']:
+                print("Percentiles of authors per removed org identity:")
+                for p in AUTHOR_COUNT_PERCENTILES:
+                    print(f"  p{p}: {filter_stats['org_removed_percentiles'][p]:.2f}")
         print(f"Identities removed (max threshold): {filter_stats['max_removed_count']}")
         print(f"Average authors per remaining identity (before max filtering): {filter_stats['remaining_avg_authors']:.2f}")
         print(f"Median authors per remaining identity (before max filtering): {filter_stats['remaining_median_authors']:.2f}")
         print(f"Std dev authors per remaining identity (before max filtering): {filter_stats['remaining_std_authors']:.2f}")
         print(f"Maximum authors per remaining identity (before max filtering): {filter_stats['remaining_max_authors']}")
+        if filter_stats['remaining_percentiles']:
+            print("Percentiles of authors per remaining identity (before max filtering):")
+            for p in AUTHOR_COUNT_PERCENTILES:
+                print(f"  p{p}: {filter_stats['remaining_percentiles'][p]:.2f}")
 
     # Write summary statistics to a separate file
     # Generate summary filename by appending _summary before the .csv extension
@@ -672,11 +691,16 @@ def evaluate_identifiers(grouped_data, output_csv, config, limit=None, num_worke
                 writer.writerow(['Median authors per removed org identity', f"{filter_stats['org_removed_median_authors']:.2f}", ''])
                 writer.writerow(['Std dev authors per removed org identity', f"{filter_stats['org_removed_std_authors']:.2f}", ''])
                 writer.writerow(['Max authors per removed org identity', filter_stats['org_removed_max_authors'], ''])
+                for p in AUTHOR_COUNT_PERCENTILES:
+                    writer.writerow([f'p{p} authors per removed org identity', f"{filter_stats['org_removed_percentiles'][p]:.2f}", ''])
             writer.writerow(['Identities removed (max threshold)', filter_stats['max_removed_count'], ''])
             writer.writerow(['Avg authors per remaining identity (before max)', f"{filter_stats['remaining_avg_authors']:.2f}", ''])
             writer.writerow(['Median authors per remaining identity (before max)', f"{filter_stats['remaining_median_authors']:.2f}", ''])
             writer.writerow(['Std dev authors per remaining identity (before max)', f"{filter_stats['remaining_std_authors']:.2f}", ''])
             writer.writerow(['Max authors per remaining identity (before max)', filter_stats['remaining_max_authors'], ''])
+            if filter_stats['remaining_percentiles']:
+                for p in AUTHOR_COUNT_PERCENTILES:
+                    writer.writerow([f'p{p} authors per remaining identity (before max)', f"{filter_stats['remaining_percentiles'][p]:.2f}", ''])
     print(f"Summary statistics written to {summary_csv}")
 
 
