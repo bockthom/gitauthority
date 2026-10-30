@@ -1,13 +1,18 @@
 
 ## GitAuthority + Evaluation
 
-This repository contains the implementation of GitAuthority as well as the corresponding evaluation scripts.
+This repository consists of two parts:
+
+- [**GitAuthority**](#gitauthority): the implementation of our configurable de-aliasing tool, which can be used on its own to de-alias author information in any set of name and email pairs.
+- [**Evaluation**](#evaluation): the replication package of our article *Between Accuracy and Privacy: Rethinking Developer-Identity De-Aliasing in Git Repositories* (see [Cite as](#cite-as)), containing all scripts to reproduce the analyses reported in the article.
 
 Note that the datasets used to validate GitAuthority are deliberately not part of this replication package. For privacy reasons, we cannot publish these datasets as they contain personal name and email addresses of real people. Anonymizing them is not possible because their actual spellings etc. are necessary to serve as a proper ground truth. However, this replication package contains detailed information on how to get access to the used datasets or how to create these datasets on your own. In case of questions regarding that, please reach out to the authors of this replication package.
 
 ___
 
 ## GitAuthority
+
+> **Disclaimer:** This project is not affiliated with, endorsed by, or sponsored by the Git Project in any way. Git is a trademark of Software Freedom Conservancy, and GitAuthority is an independent academic research tool. Its name is a play on words (Git + author(ity)), as it de-aliases author information from Git repositories.
 
 GitAuthority is a configurable tool for de-aliasing author information based on author aliases that consist of name and email pairs. It uses configurable normalization steps and matching rules (i.e., heuristics) to group author identities that belong to the same person.
 
@@ -163,9 +168,17 @@ If you would like to prevent other first names being merged than those provided 
 
 ---
 
+## Cite as
+
+If you use GitAuthority or any part of this replication package in your research, please cite our article:
+
+> Thomas Bock, Shyam Agarwal, Curtis Atkisson, Audris Mockus, and Bogdan Vasilescu. Between Accuracy and Privacy: Rethinking Developer-Identity De-Aliasing in Git Repositories. *Empirical Software Engineering*, 2026. DOI: [10.1007/s10664-026-11012-0](https://doi.org/10.1007/s10664-026-11012-0)
+
+---
+
 ## Evaluation
 
-This repository includes several analysis and evaluation components in separate directories. Each directory contains its own README file with detailed instructions. Please find more information on the individual directories below after the description of the datasets.
+In addition to the tool GitAuthority, this repository includes the replication package of our article (see [Cite as](#cite-as)). The several analysis and evaluation components are contained in separate directories. Each directory contains its own README file with detailed instructions. Please find more information on the individual directories below after the description of the datasets.
 
 ### Datasets
 
@@ -245,6 +258,4 @@ See [implication_evaluation/README_IMPLICATION_EVALUATION.md](implication_evalua
 
 ## Questions
 
-If you have any further questions regarding GitAuthority, the used datasets, or the evaluation analyses, please reach out to the authors of this replication package.
-
-
+If you have any further questions regarding GitAuthority, the used datasets, or the evaluation analyses, please reach out to Thomas Bock.
